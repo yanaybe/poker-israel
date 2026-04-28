@@ -1,0 +1,71 @@
+import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/db'
+
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url)
+  const hostId = searchParams.get('hostId')
+  const city = searchParams.get('city')
+  const gameType = searchParams.get('gameType')
+  const status = searchParams.get('status')
+
+  const where: Record<string, unknown> = {}
+  if (hostId) where.hostId = hostId
+  if (city) where.city = city
+  if (gameType) where.gameType = gameType
+  if (status) where.status = status
+
+  const games = await prisma.game.findMany({
+    where,
+    include: {
+      host: {
+        select: { id: true, name: true, image: true, city: true, skillLevel: true },
+      },
+      _count: { select: { requests: true } },
+    },
+    orderBy: { dateTime: 'asc' },
+  })
+
+  return NextResponse.json(games)
+}
+
+export async function POST(req: Request) {
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: 'נא להתחבר' }, { status: 401 })
+  }
+
+  try {
+    const body = await req.json()
+    const { title, location, city, dateTime, buyIn, gameType, stakes, houseFee, maxPlayers, notes } = body
+
+    if (!title || !location || !city || !dateTime || !gameType || !stakes || !maxPlayers) {
+      return NextResponse.json({ error: 'חסרים שדות חובה' }, { status: 400 })
+    }
+
+    const game = await prisma.game.create({
+      data: {
+        hostId: session.user.id,
+        title,
+        location,
+        city,
+        dateTime: new Date(dateTime),
+        buyIn: parseInt(buyIn),
+        gameType,
+        stakes,
+        houseFee: houseFee ?? null,
+        maxPlayers: parseInt(maxPlayers),
+        notes: notes ?? null,
+      },
+      include: {
+        host: { select: { id: true, name: true, image: true, city: true, skillLevel: true } },
+      },
+    })
+
+    return NextResponse.json(game, { status: 201 })
+  } catch (error) {
+    console.error('Create game error:', error)
+    return NextResponse.json({ error: 'שגיאה ביצירת המשחק' }, { status: 500 })
+  }
+}

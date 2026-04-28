@@ -1,0 +1,85 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id         String   @id @default(cuid())
+  email      String   @unique
+  password   String
+  name       String
+  age        Int?
+  city       String?
+  skillLevel String   @default("BEGINNER")
+  image      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  gamesHosted      Game[]        @relation("GameHost")
+  gameRequests     GameRequest[]
+  sentMessages     Message[]     @relation("SentMessages")
+  receivedMessages Message[]     @relation("ReceivedMessages")
+}
+
+model Game {
+  id             String   @id @default(cuid())
+  hostId         String
+  host           User     @relation("GameHost", fields: [hostId], references: [id], onDelete: Cascade)
+  title          String
+  location       String
+  city           String
+  dateTime       DateTime
+  buyIn          Int
+  gameType       String
+  stakes         String
+  houseFee       Int?
+  maxPlayers     Int
+  currentPlayers Int      @default(1)
+  notes          String?
+  status         String   @default("OPEN")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  requests GameRequest[]
+}
+
+model GameRequest {
+  id        String   @id @default(cuid())
+  gameId    String
+  game      Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status    String   @default("PENDING")
+  message   String?
+  createdAt DateTime @default(now())
+
+  @@unique([gameId, userId])
+}
+
+model Message {
+  id         String   @id @default(cuid())
+  senderId   String
+  sender     User     @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiverId String
+  receiver   User     @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+  content    String
+  read       Boolean  @default(false)
+  createdAt  DateTime @default(now())
+}
+
+model Tournament {
+  id          String   @id @default(cuid())
+  name        String
+  location    String
+  city        String
+  date        DateTime
+  website     String?
+  description String?
+  prizePool   String?
+  buyIn       Int?
+  createdAt   DateTime @default(now())
+}

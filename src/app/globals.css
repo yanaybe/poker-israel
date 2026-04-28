@@ -1,0 +1,146 @@
+@import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800;900&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-heebo: 'Heebo', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
+}
+
+html {
+  direction: rtl;
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: #07110a;
+  color: #dceade;
+  font-family: 'Heebo', system-ui, sans-serif;
+  min-height: 100vh;
+  line-height: 1.6;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #091809;
+}
+::-webkit-scrollbar-thumb {
+  background: #234d2e;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #2d6a3e;
+}
+
+/* Felt texture overlay */
+.felt-bg {
+  background: radial-gradient(ellipse at 50% 0%, #162a1c 0%, #0a1810 55%, #050f08 100%);
+}
+
+/* Card suit decorations */
+.suit-red { color: #e05252; }
+.suit-black { color: #e8f0ea; }
+
+/* Chip-style border */
+.chip-border {
+  border: 2px dashed #234d2e;
+  border-radius: 50%;
+}
+
+/* Gold shimmer effect */
+.gold-shimmer {
+  background: linear-gradient(135deg, #efca57 0%, #c9971e 50%, #a87a18 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Glass card effect */
+.glass-card {
+  background: rgba(13, 28, 16, 0.8);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(26, 51, 34, 0.6);
+}
+
+/* Input styles override for RTL */
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"] {
+  direction: rtl;
+  text-align: right;
+}
+
+/* Prose links */
+a {
+  transition: color 0.2s ease;
+}
+
+/* Smooth transitions */
+button, a {
+  transition: all 0.2s ease;
+}
+
+/* Focus ring */
+:focus-visible {
+  outline: 2px solid #c9971e;
+  outline-offset: 2px;
+}
+
+/* Loading animation */
+@keyframes shimmer {
+  0% { background-position: -1000px 0; }
+  100% { background-position: 1000px 0; }
+}
+
+.loading-shimmer {
+  background: linear-gradient(90deg, #0d2212 0%, #1a3822 50%, #0d2212 100%);
+  background-size: 1000px 100%;
+  animation: shimmer 2s infinite;
+}
+
+/* Message bubble */
+.message-sent {
+  background: linear-gradient(135deg, #234d2e, #1a3822);
+  border-radius: 18px 18px 4px 18px;
+}
+
+.message-received {
+  background: #0d2212;
+  border-radius: 18px 18px 18px 4px;
+  border: 1px solid #1a3822;
+}
+
+/* Card hover effect */
+.game-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4), 0 0 15px rgba(201, 151, 30, 0.1);
+}
+
+/* Notification dot */
+.notification-dot {
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  width: 10px;
+  height: 10px;
+  background: #e05252;
+  border-radius: 50%;
+  border: 2px solid #07110a;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.2); opacity: 0.8; }
+}
