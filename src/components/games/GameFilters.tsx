@@ -82,10 +82,10 @@ export function GameFilters({ onFilter }: GameFiltersProps) {
             ]}
           />
           <Select
-            label="עיוורים"
+            label="בליינדים"
             value={filters.stakes}
             onChange={(e) => update('stakes', e.target.value)}
-            placeholder="כל העיוורים"
+            placeholder="כל הבליינדים"
             options={STAKES_OPTIONS.map((s) => ({ value: s, label: s }))}
           />
           <Select

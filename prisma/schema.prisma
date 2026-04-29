@@ -36,7 +36,10 @@ model Game {
   buyIn          Int
   gameType       String
   stakes         String
+  houseFeeType   String?
   houseFee       Int?
+  houseFeePct    Float?
+  houseFeeMax    Int?
   maxPlayers     Int
   currentPlayers Int      @default(1)
   notes          String?

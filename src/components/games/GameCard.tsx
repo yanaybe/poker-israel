@@ -7,7 +7,7 @@ import { MapPin, Clock, Users, DollarSign, MessageCircle } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { cn, formatDate, formatCurrency, getGameTypeIcon, getStatusColor } from '@/lib/utils'
+import { cn, formatDate, formatHouseFee, getGameTypeIcon, getStatusColor } from '@/lib/utils'
 import { GAME_TYPE_LABELS, GAME_STATUS_LABELS, SKILL_LABELS, type GameWithHost } from '@/types'
 
 interface GameCardProps {
@@ -84,8 +84,10 @@ export function GameCard({ game, compact }: GameCardProps) {
         {/* Badges */}
         <div className="flex flex-wrap gap-2 mb-4">
           <Badge variant="gold">{GAME_TYPE_LABELS[game.gameType]}</Badge>
-          <Badge variant="default">עיוורים: {game.stakes}</Badge>
-          {game.houseFee ? <Badge variant="default">עמלה: {formatCurrency(game.houseFee)}</Badge> : <Badge variant="green">ללא עמלה</Badge>}
+          <Badge variant="default">בליינדים: {game.stakes}</Badge>
+          {game.houseFeeType && game.houseFeeType !== 'NONE'
+            ? <Badge variant="default">עמלה: {formatHouseFee(game.houseFeeType, game.houseFee, game.houseFeePct, game.houseFeeMax)}</Badge>
+            : <Badge variant="green">ללא עמלה</Badge>}
         </div>
 
         {/* Player progress bar */}

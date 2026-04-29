@@ -58,6 +58,21 @@ export function getStatusColor(status: string): string {
   }
 }
 
+export function formatHouseFee(
+  houseFeeType?: string | null,
+  houseFee?: number | null,
+  houseFeePct?: number | null,
+  houseFeeMax?: number | null
+): string {
+  if (!houseFeeType || houseFeeType === 'NONE') return 'ללא עמלה'
+  if (houseFeeType === 'ENTRY') return `כניסה: ${formatCurrency(houseFee ?? 0)}`
+  if (houseFeeType === 'PER_HAND') {
+    const pct = `${houseFeePct}% מכל יד`
+    return houseFeeMax ? `${pct} (מקס ${formatCurrency(houseFeeMax)})` : pct
+  }
+  return 'ללא עמלה'
+}
+
 export function getGameTypeIcon(gameType: string): string {
   switch (gameType) {
     case 'CASH': return '💰'

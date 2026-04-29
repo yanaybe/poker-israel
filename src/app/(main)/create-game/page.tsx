@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Textarea } from '@/components/ui/Textarea'
 import { Button } from '@/components/ui/Button'
+import { cn } from '@/lib/utils'
 import { ISRAELI_CITIES, STAKES_OPTIONS } from '@/types'
 
 const schema = z.object({
@@ -18,8 +19,11 @@ const schema = z.object({
   dateTime: z.string().min(1, 'נא לבחור תאריך ושעה'),
   buyIn: z.string().min(1, 'נא להזין ביי-אין').refine((v) => parseInt(v) >= 0, 'ביי-אין לא תקין'),
   gameType: z.enum(['CASH', 'TOURNAMENT', 'SIT_AND_GO']),
-  stakes: z.string().min(1, 'נא לבחור עיוורים'),
+  stakes: z.string().min(1, 'נא לבחור בליינדים'),
+  houseFeeType: z.enum(['NONE', 'ENTRY', 'PER_HAND']).default('NONE'),
   houseFee: z.string().optional(),
+  houseFeePct: z.string().optional(),
+  houseFeeMax: z.string().optional(),
   maxPlayers: z.string().refine((v) => parseInt(v) >= 2 && parseInt(v) <= 20, 'בין 2 ל-20 שחקנים'),
   notes: z.string().optional(),
 })
@@ -31,14 +35,15 @@ export default function CreateGamePage() {
   const [error, setError] = useState('')
 
   const {
-    register, handleSubmit, watch,
+    register, handleSubmit, watch, setValue,
     formState: { errors, isSubmitting },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { gameType: 'CASH', maxPlayers: '9' },
+    defaultValues: { gameType: 'CASH', maxPlayers: '9', houseFeeType: 'NONE' },
   })
 
   const gameType = watch('gameType')
+  const feeType = watch('houseFeeType')
 
   const onSubmit = async (data: FormData) => {
     setError('')
@@ -49,9 +54,12 @@ export default function CreateGamePage() {
         body: JSON.stringify({
           ...data,
           buyIn: parseInt(data.buyIn),
-          houseFee: data.houseFee ? parseInt(data.houseFee) : null,
           maxPlayers: parseInt(data.maxPlayers),
           dateTime: new Date(data.dateTime).toISOString(),
+          houseFeeType: data.houseFeeType === 'NONE' ? null : data.houseFeeType,
+          houseFee: data.houseFeeType === 'ENTRY' && data.houseFee ? parseInt(data.houseFee) : null,
+          houseFeePct: data.houseFeeType === 'PER_HAND' && data.houseFeePct ? parseFloat(data.houseFeePct) : null,
+          houseFeeMax: data.houseFeeType === 'PER_HAND' && data.houseFeeMax ? parseInt(data.houseFeeMax) : null,
         }),
       })
 
@@ -148,35 +156,83 @@ export default function CreateGamePage() {
               error={errors.buyIn?.message}
             />
             <Select
-              label="עיוורים (Stakes)"
-              placeholder="בחר עיוורים"
+              label="בליינדים (Stakes)"
+              placeholder="בחר בליינדים"
               {...register('stakes')}
               error={errors.stakes?.message}
               options={STAKES_OPTIONS.map((s) => ({ value: s, label: s }))}
             />
           </div>
 
-          {/* House fee + Max players */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input
-              label="עמלה לבית (₪) — אופציונלי"
-              type="number"
-              min="0"
-              placeholder="0"
-              {...register('houseFee')}
-              error={errors.houseFee?.message}
-              hint="השאר ריק אם אין עמלה"
-            />
-            <Input
-              label="מקסימום שחקנים"
-              type="number"
-              min="2"
-              max="20"
-              placeholder="9"
-              {...register('maxPlayers')}
-              error={errors.maxPlayers?.message}
-            />
+          {/* House Fee */}
+          <div>
+            <label className="block text-sm font-medium text-poker-muted mb-2">עמלה לבית</label>
+            <div className="flex gap-2 mb-3">
+              {([
+                { value: 'NONE', label: 'ללא עמלה' },
+                { value: 'ENTRY', label: '🎟 כניסה חד-פעמית' },
+                { value: 'PER_HAND', label: '% אחוז מכל יד' },
+              ] as const).map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setValue('houseFeeType', opt.value)}
+                  className={cn(
+                    'flex-1 px-3 py-2 rounded-xl text-sm font-medium transition-all border',
+                    feeType === opt.value
+                      ? 'bg-gold-500/20 border-gold-500/50 text-gold-400'
+                      : 'bg-felt-900 border-felt-700 text-poker-muted hover:border-felt-600'
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            {feeType === 'ENTRY' && (
+              <Input
+                label="סכום כניסה (₪)"
+                type="number"
+                min="1"
+                placeholder="50"
+                {...register('houseFee')}
+                error={errors.houseFee?.message}
+              />
+            )}
+            {feeType === 'PER_HAND' && (
+              <div className="grid grid-cols-2 gap-4">
+                <Input
+                  label="אחוז מכל יד (%)"
+                  type="number"
+                  min="0.1"
+                  max="100"
+                  step="0.1"
+                  placeholder="3"
+                  {...register('houseFeePct')}
+                  error={errors.houseFeePct?.message}
+                />
+                <Input
+                  label="תקרה (₪) — אופציונלי"
+                  type="number"
+                  min="1"
+                  placeholder="30"
+                  {...register('houseFeeMax')}
+                  error={errors.houseFeeMax?.message}
+                  hint="השאר ריק אם אין תקרה"
+                />
+              </div>
+            )}
           </div>
+
+          {/* Max players */}
+          <Input
+            label="מקסימום שחקנים"
+            type="number"
+            min="2"
+            max="20"
+            placeholder="9"
+            {...register('maxPlayers')}
+            error={errors.maxPlayers?.message}
+          />
 
           {/* Notes */}
           <Textarea

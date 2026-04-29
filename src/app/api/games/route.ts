@@ -38,7 +38,7 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json()
-    const { title, location, city, dateTime, buyIn, gameType, stakes, houseFee, maxPlayers, notes } = body
+    const { title, location, city, dateTime, buyIn, gameType, stakes, houseFeeType, houseFee, houseFeePct, houseFeeMax, maxPlayers, notes } = body
 
     if (!title || !location || !city || !dateTime || !gameType || !stakes || !maxPlayers) {
       return NextResponse.json({ error: 'חסרים שדות חובה' }, { status: 400 })
@@ -54,7 +54,10 @@ export async function POST(req: Request) {
         buyIn: parseInt(buyIn),
         gameType,
         stakes,
+        houseFeeType: houseFeeType ?? null,
         houseFee: houseFee ?? null,
+        houseFeePct: houseFeePct ?? null,
+        houseFeeMax: houseFeeMax ?? null,
         maxPlayers: parseInt(maxPlayers),
         notes: notes ?? null,
       },

@@ -12,7 +12,7 @@ import { Modal } from '@/components/ui/Modal'
 import { Textarea } from '@/components/ui/Textarea'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 import {
-  formatDate, formatCurrency, getGameTypeIcon, getStatusColor, getSkillColor, cn,
+  formatDate, formatCurrency, formatHouseFee, getGameTypeIcon, getStatusColor, getSkillColor, cn,
 } from '@/lib/utils'
 import {
   GAME_TYPE_LABELS, GAME_STATUS_LABELS, SKILL_LABELS, REQUEST_STATUS_LABELS, type GameWithHost,
@@ -127,9 +127,9 @@ export default function GameDetailPage() {
                 { icon: <MapPin className="w-4 h-4" />, label: 'מיקום', value: `${game.location}, ${game.city}` },
                 { icon: <Clock className="w-4 h-4" />, label: 'תאריך ושעה', value: formatDate(game.dateTime) },
                 { icon: <DollarSign className="w-4 h-4" />, label: 'ביי-אין', value: formatCurrency(game.buyIn) },
-                { icon: <span className="text-sm font-bold">BB</span>, label: 'עיוורים', value: game.stakes },
+                { icon: <span className="text-sm font-bold">BB</span>, label: 'בליינדים', value: game.stakes },
                 { icon: <Users className="w-4 h-4" />, label: 'שחקנים', value: `${game.currentPlayers}/${game.maxPlayers}` },
-                { icon: <span className="text-sm">%</span>, label: 'עמלה', value: game.houseFee ? formatCurrency(game.houseFee) : 'ללא עמלה' },
+                { icon: <span className="text-sm">%</span>, label: 'עמלה', value: formatHouseFee(game.houseFeeType, game.houseFee, game.houseFeePct, game.houseFeeMax) },
               ].map((item) => (
                 <div key={item.label} className="flex items-start gap-3 p-3 bg-felt-900/50 rounded-xl">
                   <span className="text-poker-subtle mt-0.5 flex-shrink-0">{item.icon}</span>

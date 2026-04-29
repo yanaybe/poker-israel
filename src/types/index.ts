@@ -85,7 +85,10 @@ export interface GameWithHost {
   buyIn: number
   gameType: GameType
   stakes: string
+  houseFeeType?: string | null
   houseFee?: number | null
+  houseFeePct?: number | null
+  houseFeeMax?: number | null
   maxPlayers: number
   currentPlayers: number
   notes?: string | null
