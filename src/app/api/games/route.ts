@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { isPremiumHost, getMonthlyPostCount, FREE_GAME_LIMIT } from '@/lib/premium'
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
@@ -16,14 +17,25 @@ export async function GET(req: Request) {
     id: true, name: true, image: true, city: true, skillLevel: true,
     _count: { select: { strikes: true, gamesHosted: true } },
     hostRatingsReceived: { select: { punctuality: true, locationAccuracy: true, fairDealing: true, safety: true }, where: { declined: false } },
+    subscription: { select: { status: true, currentPeriodEnd: true } },
   }
 
-  const addAvgRating = <T extends { host: { hostRatingsReceived: HostRatingDim[] } }>(games: T[]) =>
-    games.map(({ host: { hostRatingsReceived, ...host }, ...g }) => {
+  const now = new Date()
+  const addAvgRating = <T extends { host: { hostRatingsReceived: HostRatingDim[]; subscription: { status: string; currentPeriodEnd: Date } | null }; boost?: { boostedUntil: Date } | null }>(games: T[]) => {
+    const withMeta = games.map(({ host: { hostRatingsReceived, subscription, ...host }, boost, ...g }) => {
       const vals = hostRatingsReceived.flatMap((r) => [r.punctuality, r.locationAccuracy, r.fairDealing, r.safety]).filter((v): v is number => v !== null)
       const avgRating = vals.length > 0 ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10 : null
-      return { ...g, host: { ...host, avgRating } }
+      const isPremium = !!subscription && subscription.status === 'active' && subscription.currentPeriodEnd > now
+      const isBoosted = !!boost && boost.boostedUntil > now
+      return { ...g, boost: isBoosted ? { boostedUntil: boost!.boostedUntil.toISOString() } : null, host: { ...host, avgRating, isPremium } }
     })
+    // Boosted games first, then by dateTime
+    return withMeta.sort((a, b) => {
+      if (a.boost && !b.boost) return -1
+      if (!a.boost && b.boost) return 1
+      return 0
+    })
+  }
 
   // Return games where a specific user has an approved request
   if (joinedUserId) {
@@ -34,6 +46,7 @@ export async function GET(req: Request) {
         game: {
           include: {
             host: { select: hostSelect },
+            boost: { select: { boostedUntil: true } },
             _count: { select: { requests: true } },
           },
         },
@@ -53,6 +66,7 @@ export async function GET(req: Request) {
     where,
     include: {
       host: { select: hostSelect },
+      boost: { select: { boostedUntil: true } },
       _count: { select: { requests: true } },
     },
     orderBy: { dateTime: 'asc' },
@@ -67,16 +81,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'נא להתחבר' }, { status: 401 })
   }
 
-  const host = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { canHostUntil: true },
-  })
+  const [host, premium, monthlyCount] = await Promise.all([
+    prisma.user.findUnique({ where: { id: session.user.id }, select: { canHostUntil: true } }),
+    isPremiumHost(session.user.id),
+    getMonthlyPostCount(session.user.id),
+  ])
   if (host?.canHostUntil && host.canHostUntil > new Date()) {
     const until = host.canHostUntil.toLocaleDateString('he-IL')
     return NextResponse.json(
       { error: `אינך יכול לפרסם משחקים עד ${until} עקב ביטולים מרובים` },
       { status: 403 }
     )
+  }
+  if (!premium && monthlyCount >= FREE_GAME_LIMIT) {
+    return NextResponse.json({ error: 'הגעת לגבול 3 משחקים בחודש', code: 'UPGRADE_REQUIRED' }, { status: 403 })
   }
 
   try {

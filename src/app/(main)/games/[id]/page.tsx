@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import Link from 'next/link'
-import { MapPin, Clock, Users, DollarSign, MessageCircle, ArrowRight, Check, X, Pencil, AlertTriangle, Star, Lock, Unlock } from 'lucide-react'
+import { MapPin, Clock, Users, DollarSign, MessageCircle, ArrowRight, Check, X, Pencil, AlertTriangle, Star, Lock, Unlock, Zap } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -61,6 +61,22 @@ export default function GameDetailPage() {
   const [cancelModal, setCancelModal] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [similarGames, setSimilarGames] = useState<GameWithHost[]>([])
+
+  // Boost state
+  const [boostModal, setBoostModal] = useState(false)
+  const [boostSubmitting, setBoostSubmitting] = useState(false)
+
+  const handleBoost = async (hours: number) => {
+    setBoostSubmitting(true)
+    try {
+      const res = await fetch('/api/payments/boost', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gameId: id, hours }),
+      })
+      const data = await res.json()
+      if (data.url) window.location.href = data.url
+    } finally { setBoostSubmitting(false) }
+  }
 
   // Host rating state (player rates host)
   const [rateHostModal, setRateHostModal] = useState(false)
@@ -253,6 +269,14 @@ export default function GameDetailPage() {
         <ArrowRight className="w-4 h-4" />חזור למשחקים
       </Link>
 
+      {/* Boosted banner */}
+      {game.boost && new Date(game.boost.boostedUntil) > new Date() && (
+        <div className="mb-4 px-4 py-2.5 bg-gold-500/10 border border-gold-500/30 rounded-xl flex items-center gap-2">
+          <Zap className="w-4 h-4 text-gold-400 fill-gold-400" />
+          <span className="text-sm text-gold-400 font-semibold">משחק מוצג בראש החיפוש עד {new Date(game.boost.boostedUntil).toLocaleDateString('he-IL')}</span>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
           {/* Game header */}
@@ -270,6 +294,9 @@ export default function GameDetailPage() {
               </div>
               {isHost && !isCancelled && (
                 <div className="flex gap-2">
+                  <button onClick={() => setBoostModal(true)} className="p-2 text-poker-muted hover:text-gold-400 rounded-xl hover:bg-felt-800/50 transition-all" title="קדם משחק">
+                    <Zap className="w-4 h-4" />
+                  </button>
                   <Link href={`/games/${game.id}/edit`}>
                     <button className="p-2 text-poker-muted hover:text-gold-400 rounded-xl hover:bg-felt-800/50 transition-all"><Pencil className="w-4 h-4" /></button>
                   </Link>
@@ -653,6 +680,25 @@ export default function GameDetailPage() {
             <Button fullWidth disabled={!hostRatingValid} loading={hostRatingSubmitting} onClick={handleRateHost}>
               {hostDeclined ? 'שלח ללא דירוג' : 'שלח דירוג'}
             </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Boost Modal */}
+      <Modal isOpen={boostModal} onClose={() => setBoostModal(false)} title="⚡ קדם את המשחק">
+        <div className="space-y-4">
+          <p className="text-poker-muted text-sm">המשחק יוצג בראש רשימת החיפוש ויגיע ליותר שחקנים.</p>
+          <div className="space-y-2">
+            {([{ label: '24 שעות', hours: 24 as const, price: '₪30' }, { label: '48 שעות', hours: 48 as const, price: '₪50' }, { label: '7 ימים', hours: 168 as const, price: '₪80' }]).map((opt) => (
+              <button key={opt.hours} onClick={() => handleBoost(opt.hours)} disabled={boostSubmitting}
+                className="w-full flex items-center justify-between p-4 bg-felt-900/50 hover:bg-felt-800/50 border border-felt-700/50 hover:border-gold-500/50 rounded-xl transition-all text-right">
+                <div>
+                  <p className="text-sm font-bold text-poker-text">{opt.label}</p>
+                  <p className="text-xs text-poker-muted">מוצג בראש החיפוש</p>
+                </div>
+                <span className="text-lg font-black text-gold-400">{opt.price}</span>
+              </button>
+            ))}
           </div>
         </div>
       </Modal>

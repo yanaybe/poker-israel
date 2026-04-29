@@ -77,6 +77,7 @@ export function Navbar() {
     { href: '/tournaments', label: 'טורנירים', icon: '🏆' },
     ...(session ? [
       { href: '/messages', label: 'הודעות', icon: '💬' },
+      { href: '/premium', label: 'פרמיום ⭐', icon: '' },
       { href: `/profile/${session.user.id}`, label: 'פרופיל', icon: '👤' },
     ] : []),
   ]

@@ -8,28 +8,29 @@ datasource db {
 }
 
 model User {
-  id           String    @id @default(cuid())
-  email        String    @unique
-  password     String
-  name         String
-  age          Int?
-  city         String?
-  skillLevel   String    @default("BEGINNER")
-  image        String?
-  canHostUntil DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  id               String    @id @default(cuid())
+  email            String    @unique
+  password         String
+  name             String
+  age              Int?
+  city             String?
+  skillLevel       String    @default("BEGINNER")
+  image            String?
+  canHostUntil     DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
-  gamesHosted          Game[]         @relation("GameHost")
-  gameRequests         GameRequest[]
-  sentMessages         Message[]      @relation("SentMessages")
-  receivedMessages     Message[]      @relation("ReceivedMessages")
-  notifications        Notification[]
-  strikes              Strike[]
-  hostRatingsGiven     HostRating[]   @relation("HostRatingsGiven")
-  hostRatingsReceived  HostRating[]   @relation("HostRatingsReceived")
-  playerRatingsGiven   PlayerRating[] @relation("PlayerRatingsGiven")
+  gamesHosted           Game[]         @relation("GameHost")
+  gameRequests          GameRequest[]
+  sentMessages          Message[]      @relation("SentMessages")
+  receivedMessages      Message[]      @relation("ReceivedMessages")
+  notifications         Notification[]
+  strikes               Strike[]
+  hostRatingsGiven      HostRating[]   @relation("HostRatingsGiven")
+  hostRatingsReceived   HostRating[]   @relation("HostRatingsReceived")
+  playerRatingsGiven    PlayerRating[] @relation("PlayerRatingsGiven")
   playerRatingsReceived PlayerRating[] @relation("PlayerRatingsReceived")
+  subscription          Subscription?
 }
 
 model Strike {
@@ -75,6 +76,7 @@ model Game {
   requests      GameRequest[]
   hostRatings   HostRating[]
   playerRatings PlayerRating[]
+  boost         GameBoost?
 }
 
 model GameRequest {
@@ -149,6 +151,28 @@ model PlayerRating {
   createdAt   DateTime @default(now())
 
   @@unique([gameId, playerId])
+}
+
+model Subscription {
+  id               String   @id @default(cuid())
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payplusToken     String   @unique  // transaction_uid from PayPlus webhook
+  status           String   // active | canceled
+  currentPeriodEnd DateTime
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model GameBoost {
+  id              String   @id @default(cuid())
+  gameId          String   @unique
+  game            Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  hostId                String
+  payplusTransactionUid String @unique
+  boostedUntil    DateTime
+  amount          Int
+  createdAt       DateTime @default(now())
 }
 
 model Tournament {

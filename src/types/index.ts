@@ -120,8 +120,10 @@ export interface GameWithHost {
     skillLevel: SkillLevel
     canHostUntil?: string | null
     avgRating?: number | null
+    isPremium?: boolean
     _count?: { strikes: number; gamesHosted: number }
   }
+  boost?: { boostedUntil: string } | null
   requests?: GameRequestWithUser[]
   hostRatings?: HostRatingItem[]
   playerRatings?: PlayerRatingItem[]

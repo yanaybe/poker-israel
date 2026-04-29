@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import { MapPin, Clock, Users, DollarSign, MessageCircle } from 'lucide-react'
+import { MapPin, Clock, Users, DollarSign, MessageCircle, Zap } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -24,6 +24,7 @@ export function GameCard({ game, compact }: GameCardProps) {
   const isFull = game.currentPlayers >= game.maxPlayers || game.status === 'FULL'
   const isCancelled = game.status === 'CANCELLED'
   const fillPercent = Math.min(100, (game.currentPlayers / game.maxPlayers) * 100)
+  const isBoosted = !!game.boost && new Date(game.boost.boostedUntil) > new Date()
 
   // Distance calculation
   let driveTime: string | null = null
@@ -47,15 +48,24 @@ export function GameCard({ game, compact }: GameCardProps) {
   return (
     <Link href={`/games/${game.id}`}>
       <article className={cn(
-        'game-card glass-card rounded-2xl border border-felt-700/50 transition-all cursor-pointer group',
+        'game-card glass-card rounded-2xl border transition-all cursor-pointer group',
+        isBoosted ? 'border-gold-500/50 shadow-gold-500/10 shadow-md' : 'border-felt-700/50',
         compact ? 'p-4' : 'p-5'
       )}>
+        {isBoosted && (
+          <div className="flex items-center gap-1 text-xs text-gold-400 mb-2">
+            <Zap className="w-3 h-3 fill-gold-400" /><span className="font-semibold">מוצג</span>
+          </div>
+        )}
         {/* Header */}
         <div className="flex items-start justify-between gap-3 mb-4">
           <div className="flex items-center gap-3 min-w-0">
             <Avatar name={game.host.name} image={game.host.image} size="sm" />
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-poker-text truncate">{game.host.name}</p>
+              <div className="flex items-center gap-1.5">
+                <p className="text-sm font-semibold text-poker-text truncate">{game.host.name}</p>
+                {game.host.isPremium && <span className="text-xs px-1.5 py-0.5 bg-gold-500/20 text-gold-400 border border-gold-500/30 rounded-full shrink-0">⭐ פרמיום</span>}
+              </div>
               {/* Quick stats line */}
               <p className="text-xs text-poker-muted flex flex-wrap items-center gap-x-1.5 mt-0.5">
                 {game.host.avgRating != null && (

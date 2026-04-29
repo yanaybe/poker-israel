@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -9,6 +10,7 @@ import { Input } from '@/components/ui/Input'
 import { Select } from '@/components/ui/Select'
 import { Textarea } from '@/components/ui/Textarea'
 import { Button } from '@/components/ui/Button'
+import { Modal } from '@/components/ui/Modal'
 import { cn } from '@/lib/utils'
 import { ISRAELI_CITIES, STAKES_OPTIONS } from '@/types'
 
@@ -60,6 +62,7 @@ type FormData = z.infer<typeof schema>
 export default function CreateGamePage() {
   const router = useRouter()
   const [error, setError] = useState('')
+  const [showPaywall, setShowPaywall] = useState(false)
   const [vibeTags, setVibeTags] = useState<string[]>([])
   const [hasFood, setHasFood] = useState(false)
   const [hasDrinks, setHasDrinks] = useState(false)
@@ -114,6 +117,10 @@ export default function CreateGamePage() {
 
       if (!res.ok) {
         const body = await res.json()
+        if (body.code === 'UPGRADE_REQUIRED') {
+          setShowPaywall(true)
+          return
+        }
         setError(body.error ?? 'שגיאה ביצירת המשחק')
         return
       }
@@ -407,6 +414,20 @@ export default function CreateGamePage() {
           </div>
         </form>
       </div>
+
+      {/* Paywall modal */}
+      <Modal isOpen={showPaywall} onClose={() => setShowPaywall(false)} title="הגעת לגבול החודשי">
+        <div className="space-y-4 text-center">
+          <div className="text-4xl">⭐</div>
+          <p className="text-poker-muted text-sm">ניתן לפרסם עד 3 משחקים בחודש בחינם. שדרג לפרמיום לפרסום ללא הגבלה.</p>
+          <div className="flex gap-3">
+            <Button variant="outline" fullWidth onClick={() => setShowPaywall(false)}>אולי מאוחר יותר</Button>
+            <Link href="/premium" className="flex-1">
+              <Button fullWidth>שדרג לפרמיום ₪199/חודש</Button>
+            </Link>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }
