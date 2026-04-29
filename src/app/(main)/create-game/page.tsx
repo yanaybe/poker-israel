@@ -243,14 +243,13 @@ export default function CreateGamePage() {
               error={errors.maxPlayers?.message}
             />
             <Input
-              label="כבר יש לי שחקנים (חוץ ממני)"
+              label="כמות שחקנים קיימת"
               type="number"
               min="0"
               max="19"
               placeholder="0"
               {...register('existingPlayers')}
               error={errors.existingPlayers?.message}
-              hint="חברים שאינם על האפליקציה"
             />
           </div>
 
