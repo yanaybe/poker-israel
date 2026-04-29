@@ -76,7 +76,7 @@ export default function EditProfilePage() {
 
       await updateSession()
       setSuccess(true)
-      setTimeout(() => router.push(`/profile/${session?.user?.id}`), 1500)
+      setTimeout(() => router.push(`/profile/${session?.user?.id}`), 2000)
     } catch {
       setError('אירעה שגיאה, נסה שוב')
     }
