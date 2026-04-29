@@ -110,6 +110,18 @@ export default function ProfilePage() {
                 <p className="text-xl font-bold text-gold-400">{user._count?.gameRequests ?? 0}</p>
                 <p className="text-xs text-poker-subtle">בקשות שנשלחו</p>
               </div>
+              {user.hostStats?.avgOverall != null && (
+                <div className="text-center px-4 py-2 bg-felt-800/50 rounded-xl">
+                  <p className="text-xl font-bold text-gold-400">{user.hostStats.avgOverall}★</p>
+                  <p className="text-xs text-poker-subtle">דירוג מארח</p>
+                </div>
+              )}
+              {user.playerStats?.avgOverall != null && (
+                <div className="text-center px-4 py-2 bg-felt-800/50 rounded-xl">
+                  <p className="text-xl font-bold text-gold-400">{user.playerStats.avgOverall}★</p>
+                  <p className="text-xs text-poker-subtle">דירוג שחקן</p>
+                </div>
+              )}
               <div className="text-center px-4 py-2 bg-felt-800/50 rounded-xl">
                 <p className="text-xs text-poker-muted">חבר מאז</p>
                 <p className="text-sm font-semibold text-poker-text">{formatDateShort(user.createdAt)}</p>
@@ -147,6 +159,47 @@ export default function ProfilePage() {
             <p className="text-red-400/80 text-xs mt-0.5">
               עקב ביטולים מאוחרים מרובים, הגישה לפרסום משחקים חסומה עד {formatDateShort(user.canHostUntil)}.
             </p>
+          </div>
+        </div>
+      )}
+
+      {/* Rating stats */}
+      {(user.hostStats?.totalRatings ?? 0) > 0 && (
+        <div className="glass-card rounded-2xl p-5 border border-felt-700/50 mb-4">
+          <h3 className="text-sm font-semibold text-poker-muted mb-3">⭐ דירוגים כמארח</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+            {[
+              { label: 'זמנים', val: user.hostStats?.avgPunctuality },
+              { label: 'דיוק מיקום', val: user.hostStats?.avgLocationAccuracy },
+              { label: 'הגינות', val: user.hostStats?.avgFairDealing },
+              { label: 'בטיחות', val: user.hostStats?.avgSafety },
+            ].map(({ label, val }) => val != null && (
+              <div key={label} className="bg-felt-900/50 rounded-xl py-3 px-2">
+                <p className="text-base font-bold text-gold-400">{val}★</p>
+                <p className="text-xs text-poker-subtle">{label}</p>
+              </div>
+            ))}
+          </div>
+          {user.hostStats?.returnRate != null && (
+            <p className="text-xs text-green-400 mt-3 text-center">{user.hostStats.returnRate}% מהשחקנים חזרו</p>
+          )}
+        </div>
+      )}
+
+      {(user.playerStats?.totalRatings ?? 0) > 0 && (
+        <div className="glass-card rounded-2xl p-5 border border-felt-700/50 mb-4">
+          <h3 className="text-sm font-semibold text-poker-muted mb-3">🃏 דירוגים כשחקן</h3>
+          <div className="grid grid-cols-3 gap-3 text-center">
+            {[
+              { label: 'התנהגות', val: user.playerStats?.avgBehavior },
+              { label: 'זמנים', val: user.playerStats?.avgPunctuality },
+              { label: 'תשלום', val: user.playerStats?.avgPayment },
+            ].map(({ label, val }) => val != null && (
+              <div key={label} className="bg-felt-900/50 rounded-xl py-3 px-2">
+                <p className="text-base font-bold text-gold-400">{val}★</p>
+                <p className="text-xs text-poker-subtle">{label}</p>
+              </div>
+            ))}
           </div>
         </div>
       )}

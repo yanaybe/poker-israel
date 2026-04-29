@@ -20,14 +20,16 @@ model User {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
-  gamesHosted      Game[]        @relation("GameHost")
-  gameRequests     GameRequest[]
-  sentMessages     Message[]     @relation("SentMessages")
-  receivedMessages Message[]     @relation("ReceivedMessages")
-  notifications    Notification[]
-  strikes          Strike[]
-  ratingsGiven     GameRating[]  @relation("RatingsGiven")
-  ratingsReceived  GameRating[]  @relation("RatingsReceived")
+  gamesHosted          Game[]         @relation("GameHost")
+  gameRequests         GameRequest[]
+  sentMessages         Message[]      @relation("SentMessages")
+  receivedMessages     Message[]      @relation("ReceivedMessages")
+  notifications        Notification[]
+  strikes              Strike[]
+  hostRatingsGiven     HostRating[]   @relation("HostRatingsGiven")
+  hostRatingsReceived  HostRating[]   @relation("HostRatingsReceived")
+  playerRatingsGiven   PlayerRating[] @relation("PlayerRatingsGiven")
+  playerRatingsReceived PlayerRating[] @relation("PlayerRatingsReceived")
 }
 
 model Strike {
@@ -39,23 +41,23 @@ model Strike {
 }
 
 model Game {
-  id             String   @id @default(cuid())
-  hostId         String
-  host           User     @relation("GameHost", fields: [hostId], references: [id], onDelete: Cascade)
-  title          String
-  neighborhood   String?
-  location       String
-  city           String
-  dateTime       DateTime
-  buyIn          Int
-  gameType       String
-  stakes         String
-  houseFeeType   String?
-  houseFee       Int?
-  houseFeePct    Float?
-  houseFeeMax    Int?
-  maxPlayers     Int
-  currentPlayers Int      @default(1)
+  id               String   @id @default(cuid())
+  hostId           String
+  host             User     @relation("GameHost", fields: [hostId], references: [id], onDelete: Cascade)
+  title            String
+  neighborhood     String?
+  location         String
+  city             String
+  dateTime         DateTime
+  buyIn            Int
+  gameType         String
+  stakes           String
+  houseFeeType     String?
+  houseFee         Int?
+  houseFeePct      Float?
+  houseFeeMax      Int?
+  maxPlayers       Int
+  currentPlayers   Int      @default(1)
   notes            String?
   status           String   @default("OPEN")
   stackMin         Int?
@@ -70,8 +72,9 @@ model Game {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
-  requests GameRequest[]
-  ratings  GameRating[]
+  requests      GameRequest[]
+  hostRatings   HostRating[]
+  playerRatings PlayerRating[]
 }
 
 model GameRequest {
@@ -109,18 +112,43 @@ model Notification {
   createdAt DateTime @default(now())
 }
 
-model GameRating {
-  id        String   @id @default(cuid())
-  gameId    String
-  game      Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
-  raterId   String
-  rater     User     @relation("RatingsGiven", fields: [raterId], references: [id], onDelete: Cascade)
-  hostId    String
-  host      User     @relation("RatingsReceived", fields: [hostId], references: [id], onDelete: Cascade)
-  score     Int
-  createdAt DateTime @default(now())
+// Player rates the host after a game
+model HostRating {
+  id               String   @id @default(cuid())
+  gameId           String
+  game             Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  raterId          String
+  rater            User     @relation("HostRatingsGiven", fields: [raterId], references: [id], onDelete: Cascade)
+  hostId           String
+  host             User     @relation("HostRatingsReceived", fields: [hostId], references: [id], onDelete: Cascade)
+  punctuality      Int?
+  locationAccuracy Int?
+  fairDealing      Int?
+  safety           Int?
+  comment          String?
+  declined         Boolean  @default(false)
+  createdAt        DateTime @default(now())
 
   @@unique([gameId, raterId])
+}
+
+// Host rates each player after a game
+model PlayerRating {
+  id          String   @id @default(cuid())
+  gameId      String
+  game        Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  raterId     String
+  rater       User     @relation("PlayerRatingsGiven", fields: [raterId], references: [id], onDelete: Cascade)
+  playerId    String
+  player      User     @relation("PlayerRatingsReceived", fields: [playerId], references: [id], onDelete: Cascade)
+  behavior    Int?
+  punctuality Int?
+  payment     Int?
+  comment     String?
+  declined    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@unique([gameId, playerId])
 }
 
 model Tournament {

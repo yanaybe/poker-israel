@@ -29,12 +29,21 @@ const REBUY_LABELS: Record<string, string> = { ALLOWED: '✅ מותרים', CAPP
 function StarRating({ value, onChange }: { value: number; onChange: (n: number) => void }) {
   const [hover, setHover] = useState(0)
   return (
-    <div className="flex gap-1 justify-center">
+    <div className="flex gap-1">
       {[1, 2, 3, 4, 5].map((n) => (
         <button key={n} type="button" onMouseEnter={() => setHover(n)} onMouseLeave={() => setHover(0)} onClick={() => onChange(n)} className="transition-transform hover:scale-110">
-          <Star className={cn('w-8 h-8', (hover || value) >= n ? 'fill-gold-400 text-gold-400' : 'text-felt-600')} />
+          <Star className={cn('w-7 h-7', (hover || value) >= n ? 'fill-gold-400 text-gold-400' : 'text-felt-600')} />
         </button>
       ))}
+    </div>
+  )
+}
+
+function DimRow({ label, value, onChange }: { label: string; value: number; onChange: (n: number) => void }) {
+  return (
+    <div className="flex items-center justify-between gap-3 py-2">
+      <span className="text-sm text-poker-muted w-32 text-right shrink-0">{label}</span>
+      <StarRating value={value} onChange={onChange} />
     </div>
   )
 }
@@ -51,10 +60,22 @@ export default function GameDetailPage() {
   const [error, setError] = useState('')
   const [cancelModal, setCancelModal] = useState(false)
   const [cancelling, setCancelling] = useState(false)
-  const [rateModal, setRateModal] = useState(false)
-  const [ratingScore, setRatingScore] = useState(0)
-  const [ratingSubmitting, setRatingSubmitting] = useState(false)
   const [similarGames, setSimilarGames] = useState<GameWithHost[]>([])
+
+  // Host rating state (player rates host)
+  const [rateHostModal, setRateHostModal] = useState(false)
+  const [hostDims, setHostDims] = useState({ punctuality: 0, locationAccuracy: 0, fairDealing: 0, safety: 0 })
+  const [hostDeclined, setHostDeclined] = useState(false)
+  const [hostRatingComment, setHostRatingComment] = useState('')
+  const [hostRatingSubmitting, setHostRatingSubmitting] = useState(false)
+
+  // Player rating state (host rates player)
+  const [ratePlayerModal, setRatePlayerModal] = useState(false)
+  const [ratingPlayerId, setRatingPlayerId] = useState<string | null>(null)
+  const [playerDims, setPlayerDims] = useState({ behavior: 0, punctuality: 0, payment: 0 })
+  const [playerDeclined, setPlayerDeclined] = useState(false)
+  const [playerRatingComment, setPlayerRatingComment] = useState('')
+  const [playerRatingSubmitting, setPlayerRatingSubmitting] = useState(false)
 
   const fetchGame = async () => {
     try {
@@ -76,7 +97,6 @@ export default function GameDetailPage() {
       .then((games: GameWithHost[]) => {
         const filtered = games.filter((g) => g.id !== game.id).slice(0, 3)
         if (filtered.length < 3) {
-          // try without gameType filter
           fetch(`/api/games?city=${encodeURIComponent(game.city)}&status=OPEN`)
             .then((r) => r.json())
             .then((all: GameWithHost[]) => {
@@ -93,12 +113,12 @@ export default function GameDetailPage() {
   }, [game?.status, game?.city, game?.gameType])
 
   const myRequest = game?.requests?.find((r) => r.userId === session?.user?.id)
-  const myRating = game?.ratings?.find((r) => r.raterId === session?.user?.id)
+  const myHostRating = game?.hostRatings?.find((r) => r.raterId === session?.user?.id)
   const isHost = game?.hostId === session?.user?.id
   const isFull = (game?.currentPlayers ?? 0) >= (game?.maxPlayers ?? 1) || game?.status === 'FULL'
   const isCancelled = game?.status === 'CANCELLED'
   const gameEnded = game ? new Date(game.dateTime) < new Date() : false
-  const canRate = !isHost && myRequest?.status === 'APPROVED' && gameEnded && !myRating
+  const canRateHost = !isHost && myRequest?.status === 'APPROVED' && gameEnded && !myHostRating
   const hoursUntilGame = game ? (new Date(game.dateTime).getTime() - Date.now()) / 3600000 : 0
 
   const handleJoinRequest = async () => {
@@ -132,14 +152,49 @@ export default function GameDetailPage() {
     } finally { setCancelling(false) }
   }
 
-  const handleRating = async () => {
-    if (!ratingScore) return
-    setRatingSubmitting(true)
+  const handleRateHost = async () => {
+    setHostRatingSubmitting(true)
     try {
-      await fetch(`/api/games/${id}/rate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ score: ratingScore }) })
-      setRateModal(false); fetchGame()
-    } finally { setRatingSubmitting(false) }
+      const body = hostDeclined
+        ? { declined: true }
+        : { declined: false, ...hostDims, comment: hostRatingComment || null }
+      await fetch(`/api/games/${id}/rate/host`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      })
+      setRateHostModal(false)
+      setHostDims({ punctuality: 0, locationAccuracy: 0, fairDealing: 0, safety: 0 })
+      setHostDeclined(false)
+      setHostRatingComment('')
+      fetchGame()
+    } finally { setHostRatingSubmitting(false) }
   }
+
+  const openRatePlayer = (playerId: string) => {
+    setRatingPlayerId(playerId)
+    setPlayerDims({ behavior: 0, punctuality: 0, payment: 0 })
+    setPlayerDeclined(false)
+    setPlayerRatingComment('')
+    setRatePlayerModal(true)
+  }
+
+  const handleRatePlayer = async () => {
+    if (!ratingPlayerId) return
+    setPlayerRatingSubmitting(true)
+    try {
+      const body = playerDeclined
+        ? { declined: true }
+        : { declined: false, ...playerDims, comment: playerRatingComment || null }
+      await fetch(`/api/games/${id}/rate/player/${ratingPlayerId}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      })
+      setRatePlayerModal(false)
+      setRatingPlayerId(null)
+      fetchGame()
+    } finally { setPlayerRatingSubmitting(false) }
+  }
+
+  const hostRatingValid = hostDeclined || (hostDims.punctuality > 0 && hostDims.locationAccuracy > 0 && hostDims.fairDealing > 0 && hostDims.safety > 0)
+  const playerRatingValid = playerDeclined || (playerDims.behavior > 0 && playerDims.punctuality > 0 && playerDims.payment > 0)
 
   if (loading) return <LoadingSpinner text="טוען פרטי משחק..." className="min-h-[60vh]" />
   if (!game) return (
@@ -156,6 +211,12 @@ export default function GameDetailPage() {
   const waitlistRequests = game.requests?.filter((r) => r.status === 'WAITLIST') ?? []
   const vibeTags = game.vibeTags ? game.vibeTags.split(',') : []
   const hostStats = game.hostStats
+
+  // Players host still needs to rate
+  const ratedPlayerIds = new Set(game.playerRatings?.map((r) => r.playerId) ?? [])
+  const unratedPlayers = isHost && gameEnded
+    ? (approvedRequests.filter((r) => !ratedPlayerIds.has(r.userId)))
+    : []
 
   // Location display
   const publicLocation = game.neighborhood ? `${game.neighborhood}, ${game.city}` : (game.location ?? game.city)
@@ -220,7 +281,6 @@ export default function GameDetailPage() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">
-              {/* Location row — address reveal */}
               <div className="flex items-start gap-3 p-3 bg-felt-900/50 rounded-xl sm:col-span-2">
                 <span className="text-poker-subtle mt-0.5 flex-shrink-0">{locationDisplay.icon}</span>
                 <div className="min-w-0">
@@ -358,7 +418,50 @@ export default function GameDetailPage() {
             </div>
           )}
 
-          {/* Similar Games — shown when current game is full/closed/cancelled */}
+          {/* Host: rate players after game */}
+          {isHost && gameEnded && unratedPlayers.length > 0 && (
+            <div className="glass-card rounded-2xl p-6 border border-gold-500/30">
+              <h3 className="text-base font-bold text-gold-400 mb-1">⭐ דרג את השחקנים</h3>
+              <p className="text-xs text-poker-muted mb-4">המשחק הסתיים — עזור לקהילה לדעת מי שחקן טוב.</p>
+              <div className="space-y-2">
+                {unratedPlayers.map((req) => (
+                  <div key={req.id} className="flex items-center justify-between gap-3 p-3 bg-felt-900/50 rounded-xl border border-felt-700/30">
+                    <div className="flex items-center gap-3">
+                      <Avatar name={req.user.name} image={req.user.image} size="sm" />
+                      <p className="text-sm font-semibold text-poker-text">{req.user.name}</p>
+                    </div>
+                    <Button size="sm" variant="outline" onClick={() => openRatePlayer(req.userId)} className="text-xs">דרג</Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Public: host ratings */}
+          {(game.hostRatings?.length ?? 0) > 0 && (
+            <div className="glass-card rounded-2xl p-6 border border-felt-700/50">
+              <h3 className="text-base font-bold text-poker-text mb-4">⭐ דירוגי המארח</h3>
+              <div className="space-y-4">
+                {game.hostRatings!.map((r) => (
+                  <div key={r.id} className="p-4 bg-felt-900/50 rounded-xl border border-felt-700/30">
+                    <div className="flex items-center gap-3 mb-3">
+                      <Avatar name={r.rater.name} image={r.rater.image} size="sm" />
+                      <p className="text-sm font-semibold text-poker-text">{r.rater.name}</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-poker-muted mb-2">
+                      {r.punctuality != null && <span>זמנים: {r.punctuality}★</span>}
+                      {r.locationAccuracy != null && <span>דיוק מיקום: {r.locationAccuracy}★</span>}
+                      {r.fairDealing != null && <span>הגינות: {r.fairDealing}★</span>}
+                      {r.safety != null && <span>בטיחות: {r.safety}★</span>}
+                    </div>
+                    {r.comment && <p className="text-xs text-poker-muted italic">"{r.comment}"</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Similar Games */}
           {(['FULL', 'CLOSED', 'CANCELLED'] as const).includes(game.status as 'FULL' | 'CLOSED' | 'CANCELLED') && similarGames.length > 0 && (
             <div>
               <h2 className="text-lg font-bold text-poker-text mb-4 flex items-center gap-2">
@@ -399,10 +502,34 @@ export default function GameDetailPage() {
                     <span className="text-red-400 font-semibold">{hostStats.lateStrikes}</span>
                   </div>
                 )}
-                {hostStats.avgRating != null && (
+                {hostStats.avgOverall != null && (
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-poker-subtle">דירוג ממוצע</span>
-                    <span className="text-gold-400 font-semibold">{hostStats.avgRating}★ <span className="text-poker-subtle font-normal">({hostStats.totalRatings})</span></span>
+                    <span className="text-gold-400 font-semibold">{hostStats.avgOverall}★ <span className="text-poker-subtle font-normal">({hostStats.totalRatings})</span></span>
+                  </div>
+                )}
+                {hostStats.avgPunctuality != null && (
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-poker-subtle">זמנים</span>
+                    <span className="text-poker-text font-semibold">{hostStats.avgPunctuality}★</span>
+                  </div>
+                )}
+                {hostStats.avgLocationAccuracy != null && (
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-poker-subtle">דיוק מיקום</span>
+                    <span className="text-poker-text font-semibold">{hostStats.avgLocationAccuracy}★</span>
+                  </div>
+                )}
+                {hostStats.avgFairDealing != null && (
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-poker-subtle">הגינות</span>
+                    <span className="text-poker-text font-semibold">{hostStats.avgFairDealing}★</span>
+                  </div>
+                )}
+                {hostStats.avgSafety != null && (
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-poker-subtle">בטיחות</span>
+                    <span className="text-poker-text font-semibold">{hostStats.avgSafety}★</span>
                   </div>
                 )}
                 {hostStats.returnRate != null && (
@@ -430,10 +557,13 @@ export default function GameDetailPage() {
                      myRequest.status === 'WAITLIST' ? '⏳ אתה ברשימת ההמתנה' :
                      '⏳ בקשה ממתינה לאישור'}
                   </span>
-                  {canRate && (
-                    <Button size="sm" fullWidth onClick={() => setRateModal(true)} className="gap-2">
+                  {canRateHost && (
+                    <Button size="sm" fullWidth onClick={() => setRateHostModal(true)} className="gap-2">
                       <Star className="w-4 h-4" />דרג את המארח
                     </Button>
+                  )}
+                  {myHostRating && (
+                    <p className="text-xs text-poker-muted">✓ דירגת את המארח</p>
                   )}
                 </div>
               ) : (
@@ -501,13 +631,54 @@ export default function GameDetailPage() {
       </Modal>
 
       {/* Rate Host Modal */}
-      <Modal isOpen={rateModal} onClose={() => setRateModal(false)} title="דרג את המארח">
-        <div className="space-y-5 text-center">
-          <p className="text-poker-muted text-sm">איך היה המשחק? הדירוג שלך עוזר לשחקנים אחרים לבחור.</p>
-          <StarRating value={ratingScore} onChange={setRatingScore} />
+      <Modal isOpen={rateHostModal} onClose={() => setRateHostModal(false)} title="דרג את המארח">
+        <div className="space-y-4">
+          {hostDeclined ? (
+            <div className="p-3 bg-felt-900/50 rounded-xl text-center">
+              <p className="text-poker-muted text-sm">לא תדורג — הדירוג לא יפורסם.</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-felt-700/30">
+              <DimRow label="זמנים" value={hostDims.punctuality} onChange={(n) => setHostDims((d) => ({ ...d, punctuality: n }))} />
+              <DimRow label="דיוק מיקום" value={hostDims.locationAccuracy} onChange={(n) => setHostDims((d) => ({ ...d, locationAccuracy: n }))} />
+              <DimRow label="הגינות" value={hostDims.fairDealing} onChange={(n) => setHostDims((d) => ({ ...d, fairDealing: n }))} />
+              <DimRow label="בטיחות" value={hostDims.safety} onChange={(n) => setHostDims((d) => ({ ...d, safety: n }))} />
+            </div>
+          )}
+          {!hostDeclined && (
+            <Textarea rows={2} placeholder="תגובה (אופציונלי)..." value={hostRatingComment} onChange={(e) => setHostRatingComment(e.target.value)} />
+          )}
           <div className="flex gap-3">
-            <Button variant="outline" fullWidth onClick={() => setRateModal(false)}>ביטול</Button>
-            <Button fullWidth disabled={!ratingScore} loading={ratingSubmitting} onClick={handleRating}>שלח דירוג</Button>
+            <Button variant="outline" fullWidth onClick={() => { setHostDeclined(true) }} className="text-poker-muted text-xs">לא רוצה לדרג</Button>
+            <Button fullWidth disabled={!hostRatingValid} loading={hostRatingSubmitting} onClick={handleRateHost}>
+              {hostDeclined ? 'שלח ללא דירוג' : 'שלח דירוג'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Rate Player Modal */}
+      <Modal isOpen={ratePlayerModal} onClose={() => { setRatePlayerModal(false); setRatingPlayerId(null) }} title="דרג שחקן">
+        <div className="space-y-4">
+          {playerDeclined ? (
+            <div className="p-3 bg-felt-900/50 rounded-xl text-center">
+              <p className="text-poker-muted text-sm">לא תדורג — הדירוג לא יפורסם.</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-felt-700/30">
+              <DimRow label="התנהגות" value={playerDims.behavior} onChange={(n) => setPlayerDims((d) => ({ ...d, behavior: n }))} />
+              <DimRow label="זמנים" value={playerDims.punctuality} onChange={(n) => setPlayerDims((d) => ({ ...d, punctuality: n }))} />
+              <DimRow label="תשלום" value={playerDims.payment} onChange={(n) => setPlayerDims((d) => ({ ...d, payment: n }))} />
+            </div>
+          )}
+          {!playerDeclined && (
+            <Textarea rows={2} placeholder="תגובה (אופציונלי)..." value={playerRatingComment} onChange={(e) => setPlayerRatingComment(e.target.value)} />
+          )}
+          <div className="flex gap-3">
+            <Button variant="outline" fullWidth onClick={() => setPlayerDeclined(true)} className="text-poker-muted text-xs">לא רוצה לדרג</Button>
+            <Button fullWidth disabled={!playerRatingValid} loading={playerRatingSubmitting} onClick={handleRatePlayer}>
+              {playerDeclined ? 'שלח ללא דירוג' : 'שלח דירוג'}
+            </Button>
           </div>
         </div>
       </Modal>

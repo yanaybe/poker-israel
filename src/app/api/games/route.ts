@@ -11,22 +11,19 @@ export async function GET(req: Request) {
   const status = searchParams.get('status')
   const joinedUserId = searchParams.get('joinedUserId')
 
+  type HostRatingDim = { punctuality: number | null; locationAccuracy: number | null; fairDealing: number | null; safety: number | null }
   const hostSelect = {
     id: true, name: true, image: true, city: true, skillLevel: true,
     _count: { select: { strikes: true, gamesHosted: true } },
-    ratingsReceived: { select: { score: true } },
+    hostRatingsReceived: { select: { punctuality: true, locationAccuracy: true, fairDealing: true, safety: true }, where: { declined: false } },
   }
 
-  const addAvgRating = <T extends { host: { ratingsReceived: { score: number }[] } }>(games: T[]) =>
-    games.map(({ host: { ratingsReceived, ...host }, ...g }) => ({
-      ...g,
-      host: {
-        ...host,
-        avgRating: ratingsReceived.length > 0
-          ? Math.round((ratingsReceived.reduce((s, r) => s + r.score, 0) / ratingsReceived.length) * 10) / 10
-          : null,
-      },
-    }))
+  const addAvgRating = <T extends { host: { hostRatingsReceived: HostRatingDim[] } }>(games: T[]) =>
+    games.map(({ host: { hostRatingsReceived, ...host }, ...g }) => {
+      const vals = hostRatingsReceived.flatMap((r) => [r.punctuality, r.locationAccuracy, r.fairDealing, r.safety]).filter((v): v is number => v !== null)
+      const avgRating = vals.length > 0 ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10 : null
+      return { ...g, host: { ...host, avgRating } }
+    })
 
   // Return games where a specific user has an approved request
   if (joinedUserId) {

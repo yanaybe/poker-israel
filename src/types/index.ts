@@ -78,6 +78,8 @@ export interface UserProfile {
     gameRequests: number
     strikes: number
   }
+  hostStats?: HostStats
+  playerStats?: PlayerStats
 }
 
 export interface GameWithHost {
@@ -121,23 +123,56 @@ export interface GameWithHost {
     _count?: { strikes: number; gamesHosted: number }
   }
   requests?: GameRequestWithUser[]
-  ratings?: GameRatingItem[]
+  hostRatings?: HostRatingItem[]
+  playerRatings?: PlayerRatingItem[]
   _count?: { requests: number }
   hostStats?: HostStats
+  playerStats?: Record<string, PlayerStats>
 }
 
 export interface HostStats {
   gamesHosted: number
   lateStrikes: number
-  avgRating: number | null
+  avgOverall: number | null
+  avgPunctuality: number | null
+  avgLocationAccuracy: number | null
+  avgFairDealing: number | null
+  avgSafety: number | null
+  totalRatings: number
   returnRate: number | null
+}
+
+export interface PlayerStats {
+  avgOverall: number | null
+  avgBehavior: number | null
+  avgPunctuality: number | null
+  avgPayment: number | null
   totalRatings: number
 }
 
-export interface GameRatingItem {
+export interface HostRatingItem {
   id: string
   raterId: string
-  score: number
+  rater: { id: string; name: string; image?: string | null }
+  punctuality: number | null
+  locationAccuracy: number | null
+  fairDealing: number | null
+  safety: number | null
+  comment: string | null
+  declined: boolean
+  createdAt: string
+}
+
+export interface PlayerRatingItem {
+  id: string
+  raterId: string
+  playerId: string
+  player: { id: string; name: string; image?: string | null }
+  behavior: number | null
+  punctuality: number | null
+  payment: number | null
+  comment: string | null
+  declined: boolean
   createdAt: string
 }
 

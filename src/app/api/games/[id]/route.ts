@@ -13,7 +13,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
         select: {
           id: true, name: true, image: true, city: true, skillLevel: true, canHostUntil: true,
           _count: { select: { strikes: true, gamesHosted: true } },
-          ratingsReceived: { select: { score: true } },
+          hostRatingsReceived: { select: { punctuality: true, locationAccuracy: true, fairDealing: true, safety: true }, where: { declined: false } },
         },
       },
       requests: {
@@ -22,13 +22,22 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
         },
         orderBy: { createdAt: 'asc' },
       },
-      ratings: { select: { id: true, raterId: true, score: true, createdAt: true } },
+      hostRatings: {
+        include: { rater: { select: { id: true, name: true, image: true } } },
+        where: { declined: false },
+        orderBy: { createdAt: 'desc' },
+      },
+      playerRatings: {
+        include: { player: { select: { id: true, name: true, image: true } } },
+        where: { declined: false },
+        orderBy: { createdAt: 'desc' },
+      },
     },
   })
 
   if (!game) return NextResponse.json({ error: 'משחק לא נמצא' }, { status: 404 })
 
-  // Address reveal: hidden until 2h before for approved players; host always sees it
+  // Address reveal
   const isHost = session?.user?.id === game.hostId
   const hoursUntilGame = (game.dateTime.getTime() - Date.now()) / 3600000
   let locationRevealed = isHost
@@ -40,22 +49,32 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
     locationRevealed = !!approved && hoursUntilGame <= 2
   }
 
-  // Backward compat: if no neighborhood, always expose location
   const hasNeighborhood = !!game.neighborhood
 
-  // Compute host stats
+  // Compute host stats from HostRating
   const hostId = game.hostId
-  const [allRatings, pastGames] = await Promise.all([
-    prisma.gameRating.findMany({ where: { hostId }, select: { score: true } }),
+  const [allHostRatings, pastGames] = await Promise.all([
+    prisma.hostRating.findMany({
+      where: { hostId, declined: false },
+      select: { punctuality: true, locationAccuracy: true, fairDealing: true, safety: true },
+    }),
     prisma.game.findMany({
       where: { hostId, dateTime: { lt: new Date() } },
       include: { requests: { where: { status: 'APPROVED' }, select: { userId: true } } },
     }),
   ])
 
-  const avgRating = allRatings.length > 0
-    ? Math.round((allRatings.reduce((s, r) => s + r.score, 0) / allRatings.length) * 10) / 10
-    : null
+  const avg = (vals: (number | null)[]) => {
+    const nums = vals.filter((v): v is number => v !== null)
+    return nums.length > 0 ? Math.round((nums.reduce((a, b) => a + b, 0) / nums.length) * 10) / 10 : null
+  }
+
+  const avgPunctuality = avg(allHostRatings.map((r) => r.punctuality))
+  const avgLocationAccuracy = avg(allHostRatings.map((r) => r.locationAccuracy))
+  const avgFairDealing = avg(allHostRatings.map((r) => r.fairDealing))
+  const avgSafety = avg(allHostRatings.map((r) => r.safety))
+  const allDims = allHostRatings.flatMap((r) => [r.punctuality, r.locationAccuracy, r.fairDealing, r.safety])
+  const avgOverall = avg(allDims)
 
   const playerCount: Record<string, number> = {}
   pastGames.forEach((g) => g.requests.forEach((r) => {
@@ -65,19 +84,23 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   const returning = Object.values(playerCount).filter((c) => c > 1).length
   const returnRate = uniquePlayers >= 3 ? Math.round((returning / uniquePlayers) * 100) : null
 
-  const { ratingsReceived: _, ...hostWithoutRaw } = game.host
+  const { hostRatingsReceived: _, ...hostWithoutRaw } = game.host
 
   return NextResponse.json({
     ...game,
-    host: { ...hostWithoutRaw, avgRating },
+    host: { ...hostWithoutRaw, avgRating: avgOverall },
     location: (!hasNeighborhood || locationRevealed) ? game.location : null,
     locationRevealed: !hasNeighborhood || locationRevealed,
     hostStats: {
       gamesHosted: game.host._count.gamesHosted,
       lateStrikes: game.host._count.strikes,
-      avgRating,
+      avgOverall,
+      avgPunctuality,
+      avgLocationAccuracy,
+      avgFairDealing,
+      avgSafety,
+      totalRatings: allHostRatings.length,
       returnRate,
-      totalRatings: allRatings.length,
     },
   })
 }

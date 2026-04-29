@@ -260,7 +260,7 @@ export default function CreateGamePage() {
             {/* Stack sizes */}
             <div className="grid grid-cols-2 gap-4 mb-4">
               <Input
-                label="גודל סטק מינימלי (₪)"
+                label="גודל ערימה מינימלית (₪)"
                 type="number"
                 min="0"
                 placeholder="500"
@@ -268,7 +268,7 @@ export default function CreateGamePage() {
                 error={errors.stackMin?.message}
               />
               <Input
-                label="גודל סטק מקסימלי (₪)"
+                label="גודל ערימה מקסימלית (₪)"
                 type="number"
                 min="0"
                 placeholder="2000"
@@ -279,7 +279,7 @@ export default function CreateGamePage() {
 
             {/* Re-buys */}
             <div className="mb-4">
-              <label className="block text-sm font-medium text-poker-muted mb-2">ריי-בויים</label>
+              <label className="block text-sm font-medium text-poker-muted mb-2">ריי-ביים</label>
               <div className="flex gap-2 mb-3">
                 {([
                   { value: 'ALLOWED', label: '✅ מותר' },
@@ -302,7 +302,7 @@ export default function CreateGamePage() {
                 ))}
               </div>
               {rebuyType === 'CAPPED' && (
-                <Input label="מספר ריי-בויים מקסימלי" type="number" min="1" placeholder="2" {...register('rebuyCap')} error={errors.rebuyCap?.message} />
+                <Input label="מספר ריי-ביים מקסימלי" type="number" min="1" placeholder="2" {...register('rebuyCap')} error={errors.rebuyCap?.message} />
               )}
             </div>
 
@@ -313,7 +313,7 @@ export default function CreateGamePage() {
                 {([
                   { value: 'FAST', label: '⚡ מהיר' },
                   { value: 'NORMAL', label: '⏱ רגיל' },
-                  { value: 'SLOW', label: '🐢 איטי/לייזר' },
+                  { value: 'SLOW', label: '🐢 איטי' },
                 ] as const).map((opt) => (
                   <button
                     key={opt.value}

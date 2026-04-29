@@ -16,6 +16,7 @@ export default function GamesPage() {
   const [filtered, setFiltered] = useState<GameWithHost[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [pendingRatings, setPendingRatings] = useState(0)
 
   const fetchGames = useCallback(async (showRefreshing = false) => {
     if (showRefreshing) setRefreshing(true)
@@ -35,6 +36,11 @@ export default function GamesPage() {
   useEffect(() => {
     fetchGames()
   }, [fetchGames])
+
+  useEffect(() => {
+    if (!session) return
+    fetch('/api/ratings/pending').then((r) => r.json()).then((tasks: unknown[]) => setPendingRatings(tasks.length)).catch(() => {})
+  }, [session])
 
   const handleFilter = (filters: FilterState) => {
     let result = [...games]
@@ -78,6 +84,19 @@ export default function GamesPage() {
           )}
         </div>
       </div>
+
+      {/* Pending ratings banner */}
+      {pendingRatings > 0 && (
+        <div className="mb-6 p-4 bg-gold-500/10 border border-gold-500/30 rounded-2xl flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">⭐</span>
+            <p className="text-sm text-gold-400 font-semibold">יש לך {pendingRatings} דירוגים ממתינים</p>
+          </div>
+          <Link href="/ratings">
+            <Button size="sm" variant="outline" className="text-gold-400 border-gold-500/40 text-xs">דרג עכשיו</Button>
+          </Link>
+        </div>
+      )}
 
       {/* Filters */}
       <GameFilters onFilter={handleFilter} />
