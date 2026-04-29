@@ -13,8 +13,9 @@ export async function GET(req: Request) {
 
   // Return games where a specific user has an approved request
   if (joinedUserId) {
+    const requestStatus = searchParams.get('requestStatus') ?? 'APPROVED'
     const requests = await prisma.gameRequest.findMany({
-      where: { userId: joinedUserId, status: 'APPROVED' },
+      where: { userId: joinedUserId, status: requestStatus },
       include: {
         game: {
           include: {
@@ -56,7 +57,7 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json()
-    const { title, location, city, dateTime, buyIn, gameType, stakes, houseFeeType, houseFee, houseFeePct, houseFeeMax, maxPlayers, notes } = body
+    const { title, location, city, dateTime, buyIn, gameType, stakes, houseFeeType, houseFee, houseFeePct, houseFeeMax, maxPlayers, currentPlayers, notes } = body
 
     if (!title || !location || !city || !dateTime || !gameType || !stakes || !maxPlayers) {
       return NextResponse.json({ error: 'חסרים שדות חובה' }, { status: 400 })
@@ -77,6 +78,7 @@ export async function POST(req: Request) {
         houseFeePct: houseFeePct ?? null,
         houseFeeMax: houseFeeMax ?? null,
         maxPlayers: parseInt(maxPlayers),
+        currentPlayers: currentPlayers ?? 1,
         notes: notes ?? null,
       },
       include: {

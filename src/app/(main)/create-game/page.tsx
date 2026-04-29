@@ -25,6 +25,7 @@ const schema = z.object({
   houseFeePct: z.string().optional(),
   houseFeeMax: z.string().optional(),
   maxPlayers: z.string().refine((v) => parseInt(v) >= 2 && parseInt(v) <= 20, 'בין 2 ל-20 שחקנים'),
+  existingPlayers: z.string().optional(),
   notes: z.string().optional(),
 })
 
@@ -47,6 +48,12 @@ export default function CreateGamePage() {
 
   const onSubmit = async (data: FormData) => {
     setError('')
+    const maxP = parseInt(data.maxPlayers)
+    const existing = data.existingPlayers ? parseInt(data.existingPlayers) : 0
+    if (existing >= maxP) {
+      setError('מספר השחקנים הקיימים חייב להיות פחות ממספר השחקנים המקסימלי')
+      return
+    }
     try {
       const res = await fetch('/api/games', {
         method: 'POST',
@@ -54,7 +61,8 @@ export default function CreateGamePage() {
         body: JSON.stringify({
           ...data,
           buyIn: parseInt(data.buyIn),
-          maxPlayers: parseInt(data.maxPlayers),
+          maxPlayers: maxP,
+          currentPlayers: 1 + existing,
           dateTime: new Date(data.dateTime).toISOString(),
           houseFeeType: data.houseFeeType === 'NONE' ? null : data.houseFeeType,
           houseFee: data.houseFeeType === 'ENTRY' && data.houseFee ? parseInt(data.houseFee) : null,
@@ -223,16 +231,28 @@ export default function CreateGamePage() {
             )}
           </div>
 
-          {/* Max players */}
-          <Input
-            label="מקסימום שחקנים"
-            type="number"
-            min="2"
-            max="20"
-            placeholder="9"
-            {...register('maxPlayers')}
-            error={errors.maxPlayers?.message}
-          />
+          {/* Max players + existing players */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Input
+              label="מקסימום שחקנים"
+              type="number"
+              min="2"
+              max="20"
+              placeholder="9"
+              {...register('maxPlayers')}
+              error={errors.maxPlayers?.message}
+            />
+            <Input
+              label="כבר יש לי שחקנים (חוץ ממני)"
+              type="number"
+              min="0"
+              max="19"
+              placeholder="0"
+              {...register('existingPlayers')}
+              error={errors.existingPlayers?.message}
+              hint="חברים שאינם על האפליקציה"
+            />
+          </div>
 
           {/* Notes */}
           <Textarea

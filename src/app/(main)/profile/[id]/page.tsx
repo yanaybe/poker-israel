@@ -19,6 +19,7 @@ export default function ProfilePage() {
   const [user, setUser] = useState<UserProfile | null>(null)
   const [hostedGames, setHostedGames] = useState<GameWithHost[]>([])
   const [upcomingGames, setUpcomingGames] = useState<GameWithHost[]>([])
+  const [pendingGames, setPendingGames] = useState<GameWithHost[]>([])
   const [upcomingLoaded, setUpcomingLoaded] = useState(false)
   const [upcomingLoading, setUpcomingLoading] = useState(false)
   const [activeTab, setActiveTab] = useState<'hosted' | 'upcoming'>('hosted')
@@ -46,8 +47,12 @@ export default function ProfilePage() {
     if (upcomingLoaded) return
     setUpcomingLoading(true)
     try {
-      const res = await fetch(`/api/games?joinedUserId=${id}`)
-      if (res.ok) setUpcomingGames(await res.json())
+      const [approvedRes, pendingRes] = await Promise.all([
+        fetch(`/api/games?joinedUserId=${id}&requestStatus=APPROVED`),
+        fetch(`/api/games?joinedUserId=${id}&requestStatus=PENDING`),
+      ])
+      if (approvedRes.ok) setUpcomingGames(await approvedRes.json())
+      if (pendingRes.ok) setPendingGames(await pendingRes.json())
     } finally {
       setUpcomingLoading(false)
       setUpcomingLoaded(true)
@@ -186,31 +191,65 @@ export default function ProfilePage() {
       )}
 
       {isOwn && activeTab === 'upcoming' && (
-        <div>
-          <h2 className="text-xl font-bold text-poker-text mb-4">
-            המשחקים הבאים שלי
-            {upcomingGames.length > 0 && (
-              <span className="mr-2 text-sm text-poker-muted font-normal">({upcomingGames.length})</span>
-            )}
-          </h2>
+        <div className="space-y-8">
           {upcomingLoading ? (
             <div className="glass-card rounded-2xl p-10 border border-felt-700/50 text-center">
               <p className="text-poker-muted text-sm">טוען...</p>
             </div>
-          ) : upcomingGames.length === 0 ? (
-            <div className="glass-card rounded-2xl p-10 border border-felt-700/50 text-center">
-              <div className="text-4xl mb-3">📅</div>
-              <p className="text-poker-muted">עדיין לא אושרת למשחקים.</p>
-              <Link href="/games" className="mt-4 inline-block">
-                <Button size="sm">חפש משחקים</Button>
-              </Link>
-            </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {upcomingGames.map((game) => (
-                <GameCard key={game.id} game={game} compact />
-              ))}
-            </div>
+            <>
+              {/* Approved games */}
+              <div>
+                <h2 className="text-xl font-bold text-poker-text mb-4 flex items-center gap-2">
+                  ✅ משחקים מאושרים
+                  {upcomingGames.length > 0 && (
+                    <span className="text-sm text-poker-muted font-normal">({upcomingGames.length})</span>
+                  )}
+                </h2>
+                {upcomingGames.length === 0 ? (
+                  <div className="glass-card rounded-2xl p-8 border border-felt-700/50 text-center">
+                    <p className="text-poker-muted text-sm">עדיין לא אושרת למשחקים.</p>
+                    <Link href="/games" className="mt-3 inline-block">
+                      <Button size="sm">חפש משחקים</Button>
+                    </Link>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {upcomingGames.map((game) => (
+                      <GameCard key={game.id} game={game} compact />
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Pending requests */}
+              <div>
+                <h2 className="text-xl font-bold text-poker-text mb-4 flex items-center gap-2">
+                  ⏳ ממתינות לאישור
+                  {pendingGames.length > 0 && (
+                    <span className="text-sm text-poker-muted font-normal">({pendingGames.length})</span>
+                  )}
+                </h2>
+                {pendingGames.length === 0 ? (
+                  <div className="glass-card rounded-2xl p-8 border border-felt-700/50 text-center">
+                    <p className="text-poker-muted text-sm">אין בקשות ממתינות.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {pendingGames.map((game) => (
+                      <div key={game.id} className="relative">
+                        <GameCard game={game} compact />
+                        <div className="absolute top-3 left-3">
+                          <span className="text-xs px-2 py-1 bg-gold-500/20 text-gold-400 border border-gold-500/30 rounded-full font-medium">
+                            ⏳ ממתין לאישור
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
           )}
         </div>
       )}
