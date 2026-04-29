@@ -7,7 +7,7 @@ import { MapPin, Clock, Users, DollarSign, MessageCircle } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { cn, formatDate, formatHouseFee, getGameTypeIcon, getStatusColor } from '@/lib/utils'
+import { cn, formatDate, formatCurrency, formatHouseFee, getGameTypeIcon, getStatusColor } from '@/lib/utils'
 import { GAME_TYPE_LABELS, GAME_STATUS_LABELS, SKILL_LABELS, type GameWithHost } from '@/types'
 
 interface GameCardProps {
