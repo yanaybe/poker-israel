@@ -77,7 +77,13 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json()
-    const { title, location, city, dateTime, buyIn, gameType, stakes, houseFeeType, houseFee, houseFeePct, houseFeeMax, maxPlayers, currentPlayers, notes } = body
+    const {
+      title, location, city, dateTime, buyIn, gameType, stakes,
+      houseFeeType, houseFee, houseFeePct, houseFeeMax,
+      maxPlayers, currentPlayers, notes,
+      stackMin, stackMax, rebuyType, rebuyCap, gamePace, vibeTags, expectedDuration,
+      hasFood, hasDrinks,
+    } = body
 
     if (!title || !location || !city || !dateTime || !gameType || !stakes || !maxPlayers) {
       return NextResponse.json({ error: 'חסרים שדות חובה' }, { status: 400 })
@@ -100,6 +106,15 @@ export async function POST(req: Request) {
         maxPlayers: parseInt(maxPlayers),
         currentPlayers: currentPlayers ?? 1,
         notes: notes ?? null,
+        stackMin: stackMin ? parseInt(stackMin) : null,
+        stackMax: stackMax ? parseInt(stackMax) : null,
+        rebuyType: rebuyType ?? null,
+        rebuyCap: rebuyType === 'CAPPED' && rebuyCap ? parseInt(rebuyCap) : null,
+        gamePace: gamePace ?? null,
+        vibeTags: vibeTags ?? null,
+        expectedDuration: expectedDuration ? parseFloat(expectedDuration) : null,
+        hasFood: hasFood ?? false,
+        hasDrinks: hasDrinks ?? false,
       },
       include: {
         host: { select: { id: true, name: true, image: true, city: true, skillLevel: true } },

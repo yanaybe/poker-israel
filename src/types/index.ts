@@ -97,6 +97,15 @@ export interface GameWithHost {
   currentPlayers: number
   notes?: string | null
   status: GameStatus
+  stackMin?: number | null
+  stackMax?: number | null
+  rebuyType?: string | null
+  rebuyCap?: number | null
+  gamePace?: string | null
+  vibeTags?: string | null
+  expectedDuration?: number | null
+  hasFood?: boolean
+  hasDrinks?: boolean
   createdAt: string
   hostId: string
   host: {
@@ -109,7 +118,24 @@ export interface GameWithHost {
     _count?: { strikes: number; gamesHosted: number }
   }
   requests?: GameRequestWithUser[]
+  ratings?: GameRatingItem[]
   _count?: { requests: number }
+  hostStats?: HostStats
+}
+
+export interface HostStats {
+  gamesHosted: number
+  lateStrikes: number
+  avgRating: number | null
+  returnRate: number | null
+  totalRatings: number
+}
+
+export interface GameRatingItem {
+  id: string
+  raterId: string
+  score: number
+  createdAt: string
 }
 
 export interface GameRequestWithUser {

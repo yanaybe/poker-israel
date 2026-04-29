@@ -19,11 +19,44 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
         },
         orderBy: { createdAt: 'asc' },
       },
+      ratings: { select: { id: true, raterId: true, score: true, createdAt: true } },
     },
   })
 
   if (!game) return NextResponse.json({ error: 'משחק לא נמצא' }, { status: 404 })
-  return NextResponse.json(game)
+
+  // Compute host stats
+  const hostId = game.hostId
+  const [allRatings, pastGames] = await Promise.all([
+    prisma.gameRating.findMany({ where: { hostId }, select: { score: true } }),
+    prisma.game.findMany({
+      where: { hostId, dateTime: { lt: new Date() } },
+      include: { requests: { where: { status: 'APPROVED' }, select: { userId: true } } },
+    }),
+  ])
+
+  const avgRating = allRatings.length > 0
+    ? Math.round((allRatings.reduce((s, r) => s + r.score, 0) / allRatings.length) * 10) / 10
+    : null
+
+  const playerCount: Record<string, number> = {}
+  pastGames.forEach((g) => g.requests.forEach((r) => {
+    playerCount[r.userId] = (playerCount[r.userId] ?? 0) + 1
+  }))
+  const uniquePlayers = Object.keys(playerCount).length
+  const returning = Object.values(playerCount).filter((c) => c > 1).length
+  const returnRate = uniquePlayers >= 3 ? Math.round((returning / uniquePlayers) * 100) : null
+
+  return NextResponse.json({
+    ...game,
+    hostStats: {
+      gamesHosted: game.host._count.gamesHosted,
+      lateStrikes: game.host._count.strikes,
+      avgRating,
+      returnRate,
+      totalRatings: allRatings.length,
+    },
+  })
 }
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {

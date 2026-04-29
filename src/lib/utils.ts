@@ -74,6 +74,46 @@ export function formatHouseFee(
   return 'ללא עמלה'
 }
 
+export const CITY_COORDS: Record<string, [number, number]> = {
+  'תל אביב': [32.0853, 34.7818],
+  'ירושלים': [31.7683, 35.2137],
+  'חיפה': [32.7940, 34.9896],
+  'באר שבע': [31.2520, 34.7915],
+  'נתניה': [32.3226, 34.8530],
+  'פתח תקווה': [32.0843, 34.8878],
+  'ראשון לציון': [31.9642, 34.8000],
+  'אשדוד': [31.8044, 34.6553],
+  'רמת גן': [32.0684, 34.8248],
+  'הרצליה': [32.1663, 34.8435],
+  'כפר סבא': [32.1796, 34.9069],
+  'רעננה': [32.1849, 34.8706],
+  'בת ים': [32.0157, 34.7506],
+  'בני ברק': [32.0840, 34.8345],
+  'חולון': [32.0115, 34.7749],
+  'אילת': [29.5581, 34.9482],
+  'ים המלח': [31.5590, 35.4732],
+  'נצרת': [32.6996, 35.2955],
+  'אשקלון': [31.6688, 34.5713],
+  'רחובות': [31.8964, 34.8117],
+}
+
+export function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371
+  const toRad = (d: number) => (d * Math.PI) / 180
+  const dLat = toRad(lat2 - lat1)
+  const dLng = toRad(lng2 - lng1)
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
+export function formatDriveTime(km: number): string {
+  const minutes = Math.round((km / 50) * 60)
+  if (minutes < 60) return `${minutes} דקות נסיעה ממיקומך`
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  return m > 0 ? `${h}:${String(m).padStart(2, '0')} שעות נסיעה ממיקומך` : `${h} שעות נסיעה ממיקומך`
+}
+
 export function getGameTypeIcon(gameType: string): string {
   switch (gameType) {
     case 'CASH': return '💰'

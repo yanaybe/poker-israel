@@ -7,8 +7,9 @@ import { MapPin, Clock, Users, DollarSign, MessageCircle } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { cn, formatDate, formatCurrency, formatHouseFee, getGameTypeIcon, getStatusColor } from '@/lib/utils'
+import { cn, formatDate, formatCurrency, formatHouseFee, getGameTypeIcon, getStatusColor, CITY_COORDS, haversineKm, formatDriveTime } from '@/lib/utils'
 import { GAME_TYPE_LABELS, GAME_STATUS_LABELS, SKILL_LABELS, type GameWithHost } from '@/types'
+import { useUserLocation } from '@/hooks/useUserLocation'
 
 interface GameCardProps {
   game: GameWithHost
@@ -18,17 +19,28 @@ interface GameCardProps {
 export function GameCard({ game, compact }: GameCardProps) {
   const { data: session } = useSession()
   const router = useRouter()
+  const userLocation = useUserLocation()
 
   const isFull = game.currentPlayers >= game.maxPlayers || game.status === 'FULL'
   const isCancelled = game.status === 'CANCELLED'
   const fillPercent = Math.min(100, (game.currentPlayers / game.maxPlayers) * 100)
 
+  // Distance calculation
+  let driveTime: string | null = null
+  if (userLocation && game.city) {
+    const coords = CITY_COORDS[game.city]
+    if (coords) {
+      const km = haversineKm(userLocation.lat, userLocation.lng, coords[0], coords[1])
+      driveTime = formatDriveTime(km)
+    }
+  }
+
+  const hostStrikes = game.host._count?.strikes ?? 0
+  const hostGames = game.host._count?.gamesHosted ?? 0
+
   const handleMessage = (e: React.MouseEvent) => {
     e.preventDefault()
-    if (!session) {
-      router.push('/login')
-      return
-    }
+    if (!session) { router.push('/login'); return }
     router.push(`/messages/${game.host.id}`)
   }
 
@@ -44,15 +56,18 @@ export function GameCard({ game, compact }: GameCardProps) {
             <Avatar name={game.host.name} image={game.host.image} size="sm" />
             <div className="min-w-0">
               <p className="text-sm font-semibold text-poker-text truncate">{game.host.name}</p>
-              <p className="text-xs text-poker-muted">{SKILL_LABELS[game.host.skillLevel]}</p>
-              {(game.host._count?.strikes ?? 0) > 0 && (
-                <p className="text-xs text-red-400">{game.host._count!.strikes} ביטולים מאוחרים</p>
+              <p className="text-xs text-poker-muted">
+                {SKILL_LABELS[game.host.skillLevel]}
+                {hostGames > 0 && <span className="mr-1 text-poker-subtle">· {hostGames} משחקים</span>}
+              </p>
+              {hostStrikes > 0 && (
+                <p className="text-xs text-red-400">{hostStrikes} ביטולים מאוחרים</p>
               )}
             </div>
           </div>
           <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
             <span className={cn('text-xs px-2 py-0.5 rounded-full border', getStatusColor(game.status))}>
-              {GAME_STATUS_LABELS[game.status]}
+              {GAME_STATUS_LABELS[game.status as keyof typeof GAME_STATUS_LABELS] ?? game.status}
             </span>
             <span className="text-xl" title={GAME_TYPE_LABELS[game.gameType]}>
               {getGameTypeIcon(game.gameType)}
@@ -85,6 +100,14 @@ export function GameCard({ game, compact }: GameCardProps) {
           </div>
         </div>
 
+        {/* Distance ETA */}
+        {driveTime && (
+          <div className="flex items-center gap-1.5 text-xs text-poker-subtle mb-3">
+            <span>🚗</span>
+            <span>{driveTime}</span>
+          </div>
+        )}
+
         {/* Badges */}
         <div className="flex flex-wrap gap-2 mb-4">
           <Badge variant="gold">{GAME_TYPE_LABELS[game.gameType]}</Badge>
@@ -92,6 +115,11 @@ export function GameCard({ game, compact }: GameCardProps) {
           {game.houseFeeType && game.houseFeeType !== 'NONE'
             ? <Badge variant="default">עמלה: {formatHouseFee(game.houseFeeType, game.houseFee, game.houseFeePct, game.houseFeeMax)}</Badge>
             : <Badge variant="green">ללא עמלה</Badge>}
+          {game.hasFood && <Badge variant="default">🍕</Badge>}
+          {game.hasDrinks && <Badge variant="default">🥤</Badge>}
+          {game.gamePace && game.gamePace !== 'NORMAL' && (
+            <Badge variant="default">{game.gamePace === 'FAST' ? '⚡ מהיר' : '🐢 איטי'}</Badge>
+          )}
         </div>
 
         {/* Player progress bar */}
@@ -124,13 +152,8 @@ export function GameCard({ game, compact }: GameCardProps) {
             >
               {isCancelled ? 'בוטל' : isFull ? 'רשימת המתנה' : game.hostId === session?.user?.id ? 'המשחק שלי' : 'בקש להצטרף'}
             </Button>
-            {game.hostId !== session?.user?.id && (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleMessage}
-                className="text-xs gap-1.5"
-              >
+            {game.hostId !== session?.user?.id && !isCancelled && (
+              <Button size="sm" variant="outline" onClick={handleMessage} className="text-xs gap-1.5">
                 <MessageCircle className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">הודעה</span>
               </Button>

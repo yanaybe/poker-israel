@@ -26,6 +26,8 @@ model User {
   receivedMessages Message[]     @relation("ReceivedMessages")
   notifications    Notification[]
   strikes          Strike[]
+  ratingsGiven     GameRating[]  @relation("RatingsGiven")
+  ratingsReceived  GameRating[]  @relation("RatingsReceived")
 }
 
 model Strike {
@@ -53,12 +55,22 @@ model Game {
   houseFeeMax    Int?
   maxPlayers     Int
   currentPlayers Int      @default(1)
-  notes          String?
-  status         String   @default("OPEN")
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  notes            String?
+  status           String   @default("OPEN")
+  stackMin         Int?
+  stackMax         Int?
+  rebuyType        String?
+  rebuyCap         Int?
+  gamePace         String?
+  vibeTags         String?
+  expectedDuration Float?
+  hasFood          Boolean  @default(false)
+  hasDrinks        Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   requests GameRequest[]
+  ratings  GameRating[]
 }
 
 model GameRequest {
@@ -94,6 +106,20 @@ model Notification {
   gameId    String?
   read      Boolean  @default(false)
   createdAt DateTime @default(now())
+}
+
+model GameRating {
+  id        String   @id @default(cuid())
+  gameId    String
+  game      Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  raterId   String
+  rater     User     @relation("RatingsGiven", fields: [raterId], references: [id], onDelete: Cascade)
+  hostId    String
+  host      User     @relation("RatingsReceived", fields: [hostId], references: [id], onDelete: Cascade)
+  score     Int
+  createdAt DateTime @default(now())
+
+  @@unique([gameId, raterId])
 }
 
 model Tournament {
