@@ -7,7 +7,12 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const game = await prisma.game.findUnique({
     where: { id: params.id },
     include: {
-      host: { select: { id: true, name: true, image: true, city: true, skillLevel: true } },
+      host: {
+        select: {
+          id: true, name: true, image: true, city: true, skillLevel: true, canHostUntil: true,
+          _count: { select: { strikes: true, gamesHosted: true } },
+        },
+      },
       requests: {
         include: {
           user: { select: { id: true, name: true, image: true, city: true, skillLevel: true } },
@@ -30,6 +35,49 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if (game.hostId !== session.user.id) return NextResponse.json({ error: 'אין הרשאה' }, { status: 403 })
 
   const body = await req.json()
+
+  if (body.status === 'CANCELLED') {
+    await prisma.game.update({ where: { id: params.id }, data: { status: 'CANCELLED' } })
+
+    // Issue a strike if cancelling < 3h before game time
+    const hoursUntilGame = (new Date(game.dateTime).getTime() - Date.now()) / 3600000
+    if (hoursUntilGame < 3) {
+      await prisma.strike.create({ data: { userId: session.user.id, gameId: params.id } })
+
+      // Count strikes in last 60 days
+      const since = new Date(Date.now() - 60 * 24 * 3600000)
+      const recentStrikes = await prisma.strike.count({
+        where: { userId: session.user.id, createdAt: { gte: since } },
+      })
+
+      if (recentStrikes >= 3) {
+        const suspendUntil = new Date(Date.now() + 30 * 24 * 3600000)
+        await prisma.user.update({
+          where: { id: session.user.id },
+          data: { canHostUntil: suspendUntil },
+        })
+      }
+    }
+
+    // Notify all approved players the game was cancelled
+    const approvedRequests = await prisma.gameRequest.findMany({
+      where: { gameId: params.id, status: 'APPROVED' },
+      select: { userId: true },
+    })
+    if (approvedRequests.length > 0) {
+      await prisma.notification.createMany({
+        data: approvedRequests.map((r) => ({
+          userId: r.userId,
+          type: 'GAME_CANCELLED',
+          message: `❌ המשחק "${game.title}" בוטל על ידי המארח`,
+          gameId: params.id,
+        })),
+      })
+    }
+
+    return NextResponse.json({ status: 'CANCELLED' })
+  }
+
   const updated = await prisma.game.update({
     where: { id: params.id },
     data: {

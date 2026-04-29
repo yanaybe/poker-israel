@@ -1,7 +1,7 @@
 export type SkillLevel = 'BEGINNER' | 'INTERMEDIATE' | 'PRO'
 export type GameType = 'CASH' | 'TOURNAMENT' | 'SIT_AND_GO'
-export type GameStatus = 'OPEN' | 'FULL' | 'CLOSED'
-export type RequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
+export type GameStatus = 'OPEN' | 'FULL' | 'CLOSED' | 'CANCELLED'
+export type RequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'WAITLIST'
 
 export const SKILL_LABELS: Record<SkillLevel, string> = {
   BEGINNER: 'מתחיל',
@@ -19,12 +19,14 @@ export const GAME_STATUS_LABELS: Record<GameStatus, string> = {
   OPEN: 'פתוח',
   FULL: 'מלא',
   CLOSED: 'סגור',
+  CANCELLED: 'בוטל',
 }
 
 export const REQUEST_STATUS_LABELS: Record<RequestStatus, string> = {
   PENDING: 'ממתין',
   APPROVED: 'אושר',
   REJECTED: 'נדחה',
+  WAITLIST: 'רשימת המתנה',
 }
 
 export const ISRAELI_CITIES = [
@@ -69,10 +71,12 @@ export interface UserProfile {
   city?: string | null
   skillLevel: SkillLevel
   image?: string | null
+  canHostUntil?: string | null
   createdAt: string
   _count?: {
     gamesHosted: number
     gameRequests: number
+    strikes: number
   }
 }
 
@@ -101,6 +105,8 @@ export interface GameWithHost {
     image?: string | null
     city?: string | null
     skillLevel: SkillLevel
+    canHostUntil?: string | null
+    _count?: { strikes: number; gamesHosted: number }
   }
   requests?: GameRequestWithUser[]
   _count?: { requests: number }

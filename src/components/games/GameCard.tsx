@@ -20,6 +20,7 @@ export function GameCard({ game, compact }: GameCardProps) {
   const router = useRouter()
 
   const isFull = game.currentPlayers >= game.maxPlayers || game.status === 'FULL'
+  const isCancelled = game.status === 'CANCELLED'
   const fillPercent = Math.min(100, (game.currentPlayers / game.maxPlayers) * 100)
 
   const handleMessage = (e: React.MouseEvent) => {
@@ -44,6 +45,9 @@ export function GameCard({ game, compact }: GameCardProps) {
             <div className="min-w-0">
               <p className="text-sm font-semibold text-poker-text truncate">{game.host.name}</p>
               <p className="text-xs text-poker-muted">{SKILL_LABELS[game.host.skillLevel]}</p>
+              {(game.host._count?.strikes ?? 0) > 0 && (
+                <p className="text-xs text-red-400">{game.host._count!.strikes} ביטולים מאוחרים</p>
+              )}
             </div>
           </div>
           <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
@@ -114,11 +118,11 @@ export function GameCard({ game, compact }: GameCardProps) {
           <div className="flex gap-2 pt-1">
             <Button
               size="sm"
-              variant="gold"
-              disabled={isFull || game.hostId === session?.user?.id}
+              variant={isCancelled ? 'outline' : 'gold'}
+              disabled={isCancelled || game.hostId === session?.user?.id}
               className="flex-1 text-xs"
             >
-              {isFull ? 'מלא' : game.hostId === session?.user?.id ? 'המשחק שלי' : 'בקש להצטרף'}
+              {isCancelled ? 'בוטל' : isFull ? 'רשימת המתנה' : game.hostId === session?.user?.id ? 'המשחק שלי' : 'בקש להצטרף'}
             </Button>
             {game.hostId !== session?.user?.id && (
               <Button

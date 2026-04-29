@@ -8,22 +8,32 @@ datasource db {
 }
 
 model User {
-  id         String   @id @default(cuid())
-  email      String   @unique
-  password   String
-  name       String
-  age        Int?
-  city       String?
-  skillLevel String   @default("BEGINNER")
-  image      String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id           String    @id @default(cuid())
+  email        String    @unique
+  password     String
+  name         String
+  age          Int?
+  city         String?
+  skillLevel   String    @default("BEGINNER")
+  image        String?
+  canHostUntil DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   gamesHosted      Game[]        @relation("GameHost")
   gameRequests     GameRequest[]
   sentMessages     Message[]     @relation("SentMessages")
   receivedMessages Message[]     @relation("ReceivedMessages")
   notifications    Notification[]
+  strikes          Strike[]
+}
+
+model Strike {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gameId    String
+  createdAt DateTime @default(now())
 }
 
 model Game {

@@ -20,6 +20,7 @@ export default function ProfilePage() {
   const [hostedGames, setHostedGames] = useState<GameWithHost[]>([])
   const [upcomingGames, setUpcomingGames] = useState<GameWithHost[]>([])
   const [pendingGames, setPendingGames] = useState<GameWithHost[]>([])
+  const [waitlistGames, setWaitlistGames] = useState<GameWithHost[]>([])
   const [upcomingLoaded, setUpcomingLoaded] = useState(false)
   const [upcomingLoading, setUpcomingLoading] = useState(false)
   const [activeTab, setActiveTab] = useState<'hosted' | 'upcoming'>('hosted')
@@ -47,12 +48,14 @@ export default function ProfilePage() {
     if (upcomingLoaded) return
     setUpcomingLoading(true)
     try {
-      const [approvedRes, pendingRes] = await Promise.all([
+      const [approvedRes, pendingRes, waitlistRes] = await Promise.all([
         fetch(`/api/games?joinedUserId=${id}&requestStatus=APPROVED`),
         fetch(`/api/games?joinedUserId=${id}&requestStatus=PENDING`),
+        fetch(`/api/games?joinedUserId=${id}&requestStatus=WAITLIST`),
       ])
       if (approvedRes.ok) setUpcomingGames(await approvedRes.json())
       if (pendingRes.ok) setPendingGames(await pendingRes.json())
+      if (waitlistRes.ok) setWaitlistGames(await waitlistRes.json())
     } finally {
       setUpcomingLoading(false)
       setUpcomingLoaded(true)
@@ -134,6 +137,19 @@ export default function ProfilePage() {
           </div>
         </div>
       </div>
+
+      {/* Suspension warning */}
+      {isOwn && user.canHostUntil && new Date(user.canHostUntil) > new Date() && (
+        <div className="mb-4 p-4 bg-red-500/10 border border-red-500/30 rounded-2xl flex items-start gap-3">
+          <span className="text-xl">🚫</span>
+          <div>
+            <p className="text-red-400 font-bold text-sm">אינך יכול לפרסם משחקים</p>
+            <p className="text-red-400/80 text-xs mt-0.5">
+              עקב ביטולים מאוחרים מרובים, הגישה לפרסום משחקים חסומה עד {formatDateShort(user.canHostUntil)}.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Tabs — only for own profile */}
       {isOwn && (
@@ -242,6 +258,34 @@ export default function ProfilePage() {
                         <div className="absolute top-3 left-3">
                           <span className="text-xs px-2 py-1 bg-gold-500/20 text-gold-400 border border-gold-500/30 rounded-full font-medium">
                             ⏳ ממתין לאישור
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Waitlist */}
+              <div>
+                <h2 className="text-xl font-bold text-poker-text mb-4 flex items-center gap-2">
+                  🕐 רשימת המתנה
+                  {waitlistGames.length > 0 && (
+                    <span className="text-sm text-poker-muted font-normal">({waitlistGames.length})</span>
+                  )}
+                </h2>
+                {waitlistGames.length === 0 ? (
+                  <div className="glass-card rounded-2xl p-8 border border-felt-700/50 text-center">
+                    <p className="text-poker-muted text-sm">אין משחקים ברשימת ההמתנה.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {waitlistGames.map((game) => (
+                      <div key={game.id} className="relative">
+                        <GameCard game={game} compact />
+                        <div className="absolute top-3 left-3">
+                          <span className="text-xs px-2 py-1 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded-full font-medium">
+                            🕐 ברשימת המתנה
                           </span>
                         </div>
                       </div>

@@ -19,7 +19,6 @@ export async function PATCH(
     return NextResponse.json({ error: 'סטטוס לא תקין' }, { status: 400 })
   }
 
-  // Fetch request BEFORE updating to capture previous status and userId
   const request = await prisma.gameRequest.findUnique({
     where: { id: params.requestId },
     select: { userId: true, status: true },
@@ -43,10 +42,32 @@ export async function PATCH(
       await prisma.game.update({ where: { id: params.id }, data: { status: 'FULL' } })
     }
   } else if (status === 'REJECTED' && prevStatus === 'APPROVED') {
-    await prisma.game.update({
+    const refreshed = await prisma.game.update({
       where: { id: params.id },
       data: { currentPlayers: { decrement: 1 }, status: 'OPEN' },
     })
+
+    // Promote first person on waitlist to PENDING
+    const nextWaiting = await prisma.gameRequest.findFirst({
+      where: { gameId: params.id, status: 'WAITLIST' },
+      orderBy: { createdAt: 'asc' },
+    })
+    if (nextWaiting) {
+      await prisma.gameRequest.update({
+        where: { id: nextWaiting.id },
+        data: { status: 'PENDING' },
+      })
+      await prisma.notification.create({
+        data: {
+          userId: nextWaiting.userId,
+          type: 'WAITLIST_PROMOTED',
+          message: `⭐ נפל מקום ב"${game.title}" — הבקשה שלך עברה לממתין לאישור!`,
+          gameId: params.id,
+        },
+      })
+    }
+
+    void refreshed
   }
 
   // Notify the requesting user

@@ -19,7 +19,12 @@ export async function GET(req: Request) {
       include: {
         game: {
           include: {
-            host: { select: { id: true, name: true, image: true, city: true, skillLevel: true } },
+            host: {
+              select: {
+                id: true, name: true, image: true, city: true, skillLevel: true,
+                _count: { select: { strikes: true, gamesHosted: true } },
+              },
+            },
             _count: { select: { requests: true } },
           },
         },
@@ -39,7 +44,10 @@ export async function GET(req: Request) {
     where,
     include: {
       host: {
-        select: { id: true, name: true, image: true, city: true, skillLevel: true },
+        select: {
+          id: true, name: true, image: true, city: true, skillLevel: true,
+          _count: { select: { strikes: true, gamesHosted: true } },
+        },
       },
       _count: { select: { requests: true } },
     },
@@ -53,6 +61,18 @@ export async function POST(req: Request) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'נא להתחבר' }, { status: 401 })
+  }
+
+  const host = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { canHostUntil: true },
+  })
+  if (host?.canHostUntil && host.canHostUntil > new Date()) {
+    const until = host.canHostUntil.toLocaleDateString('he-IL')
+    return NextResponse.json(
+      { error: `אינך יכול לפרסם משחקים עד ${until} עקב ביטולים מרובים` },
+      { status: 403 }
+    )
   }
 
   try {

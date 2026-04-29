@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import Link from 'next/link'
-import { MapPin, Clock, Users, DollarSign, MessageCircle, ArrowRight, Check, X, Pencil } from 'lucide-react'
+import { MapPin, Clock, Users, DollarSign, MessageCircle, ArrowRight, Check, X, Pencil, AlertTriangle } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -28,6 +28,8 @@ export default function GameDetailPage() {
   const [joinMessage, setJoinMessage] = useState('')
   const [joining, setJoining] = useState(false)
   const [error, setError] = useState('')
+  const [cancelModal, setCancelModal] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
 
   const fetchGame = async () => {
     try {
@@ -43,6 +45,7 @@ export default function GameDetailPage() {
   const myRequest = game?.requests?.find((r) => r.userId === session?.user?.id)
   const isHost = game?.hostId === session?.user?.id
   const isFull = (game?.currentPlayers ?? 0) >= (game?.maxPlayers ?? 1) || game?.status === 'FULL'
+  const isCancelled = game?.status === 'CANCELLED'
 
   const handleJoinRequest = async () => {
     if (!session) { router.push('/login'); return }
@@ -74,6 +77,21 @@ export default function GameDetailPage() {
     fetchGame()
   }
 
+  const handleCancelGame = async () => {
+    setCancelling(true)
+    try {
+      await fetch(`/api/games/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'CANCELLED' }),
+      })
+      setCancelModal(false)
+      fetchGame()
+    } finally {
+      setCancelling(false)
+    }
+  }
+
   if (loading) return <LoadingSpinner text="טוען פרטי משחק..." className="min-h-[60vh]" />
 
   if (!game) return (
@@ -87,6 +105,11 @@ export default function GameDetailPage() {
   const fillPercent = Math.min(100, (game.currentPlayers / game.maxPlayers) * 100)
   const pendingRequests = game.requests?.filter((r) => r.status === 'PENDING') ?? []
   const approvedRequests = game.requests?.filter((r) => r.status === 'APPROVED') ?? []
+  const waitlistRequests = game.requests?.filter((r) => r.status === 'WAITLIST') ?? []
+  const hoursUntilGame = (new Date(game.dateTime).getTime() - Date.now()) / 3600000
+
+  const hostStrikes = game.host._count?.strikes ?? 0
+  const hostGames = game.host._count?.gamesHosted ?? 0
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
@@ -107,17 +130,26 @@ export default function GameDetailPage() {
                   <span className="text-2xl">{getGameTypeIcon(game.gameType)}</span>
                   <Badge variant="gold">{GAME_TYPE_LABELS[game.gameType]}</Badge>
                   <span className={cn('text-xs px-2 py-0.5 rounded-full border', getStatusColor(game.status))}>
-                    {GAME_STATUS_LABELS[game.status]}
+                    {GAME_STATUS_LABELS[game.status as keyof typeof GAME_STATUS_LABELS] ?? game.status}
                   </span>
                 </div>
                 <h1 className="text-2xl sm:text-3xl font-black text-poker-text">{game.title}</h1>
               </div>
-              {isHost && (
-                <Link href={`/games/${game.id}/edit`}>
-                  <button className="p-2 text-poker-muted hover:text-gold-400 rounded-xl hover:bg-felt-800/50 transition-all">
-                    <Pencil className="w-4 h-4" />
+              {isHost && !isCancelled && (
+                <div className="flex gap-2">
+                  <Link href={`/games/${game.id}/edit`}>
+                    <button className="p-2 text-poker-muted hover:text-gold-400 rounded-xl hover:bg-felt-800/50 transition-all">
+                      <Pencil className="w-4 h-4" />
+                    </button>
+                  </Link>
+                  <button
+                    onClick={() => setCancelModal(true)}
+                    className="p-2 text-poker-muted hover:text-red-400 rounded-xl hover:bg-red-400/10 transition-all"
+                    title="בטל משחק"
+                  >
+                    <X className="w-4 h-4" />
                   </button>
-                </Link>
+                </div>
               )}
             </div>
 
@@ -142,18 +174,25 @@ export default function GameDetailPage() {
             </div>
 
             {/* Progress bar */}
-            <div className="mt-5">
-              <div className="flex justify-between text-xs text-poker-subtle mb-2">
-                <span>מקומות תפוסים</span>
-                <span>{game.currentPlayers}/{game.maxPlayers}</span>
+            {!isCancelled && (
+              <div className="mt-5">
+                <div className="flex justify-between text-xs text-poker-subtle mb-2">
+                  <span>מקומות תפוסים</span>
+                  <span>{game.currentPlayers}/{game.maxPlayers}</span>
+                </div>
+                <div className="h-2 bg-felt-700 rounded-full overflow-hidden">
+                  <div
+                    className={cn('h-full rounded-full transition-all', isFull ? 'bg-red-500' : 'bg-green-500')}
+                    style={{ width: `${fillPercent}%` }}
+                  />
+                </div>
+                {waitlistRequests.length > 0 && (
+                  <p className="text-xs text-poker-subtle mt-1.5">
+                    {waitlistRequests.length} ממתינים ברשימת ההמתנה
+                  </p>
+                )}
               </div>
-              <div className="h-2 bg-felt-700 rounded-full overflow-hidden">
-                <div
-                  className={cn('h-full rounded-full transition-all', isFull ? 'bg-red-500' : 'bg-green-500')}
-                  style={{ width: `${fillPercent}%` }}
-                />
-              </div>
-            </div>
+            )}
           </div>
 
           {/* Notes */}
@@ -206,9 +245,11 @@ export default function GameDetailPage() {
                         </>
                       ) : (
                         <span className={cn('text-xs px-2 py-0.5 rounded-full border',
-                          req.status === 'APPROVED' ? 'text-green-400 bg-green-500/10 border-green-500/30' : 'text-red-400 bg-red-500/10 border-red-500/30'
+                          req.status === 'APPROVED' ? 'text-green-400 bg-green-500/10 border-green-500/30' :
+                          req.status === 'WAITLIST' ? 'text-gold-400 bg-gold-500/10 border-gold-500/30' :
+                          'text-red-400 bg-red-500/10 border-red-500/30'
                         )}>
-                          {REQUEST_STATUS_LABELS[req.status]}
+                          {REQUEST_STATUS_LABELS[req.status as keyof typeof REQUEST_STATUS_LABELS] ?? req.status}
                         </span>
                       )}
                     </div>
@@ -234,30 +275,44 @@ export default function GameDetailPage() {
                 </span>
               </div>
             </Link>
+            {hostGames > 0 && (
+              <div className="mt-3 pt-3 border-t border-felt-700/30">
+                <p className="text-xs text-poker-subtle">
+                  {hostGames} משחקים פורסמו
+                  {hostStrikes > 0 && (
+                    <span className="text-red-400 mr-1">· {hostStrikes} ביטולים מאוחרים</span>
+                  )}
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Action buttons */}
-          {!isHost && (
+          {!isHost && !isCancelled && (
             <div className="glass-card rounded-2xl p-5 border border-felt-700/50 space-y-3">
               {myRequest ? (
                 <div className="text-center py-3">
                   <span className={cn('inline-block px-4 py-2 rounded-xl text-sm font-semibold border',
                     myRequest.status === 'APPROVED' ? 'text-green-400 bg-green-500/10 border-green-500/30' :
                     myRequest.status === 'REJECTED' ? 'text-red-400 bg-red-500/10 border-red-500/30' :
+                    myRequest.status === 'WAITLIST' ? 'text-gold-400 bg-gold-500/10 border-gold-500/30' :
                     'text-gold-400 bg-gold-500/10 border-gold-500/30'
                   )}>
                     {myRequest.status === 'APPROVED' ? '✅ הבקשה אושרה!' :
                      myRequest.status === 'REJECTED' ? '❌ הבקשה נדחתה' :
+                     myRequest.status === 'WAITLIST' ? '⏳ אתה ברשימת ההמתנה' :
                      '⏳ בקשה ממתינה לאישור'}
                   </span>
                 </div>
               ) : (
                 <Button
                   fullWidth
-                  disabled={isFull || !session}
+                  variant={isFull ? 'outline' : 'gold'}
+                  disabled={!session}
                   onClick={() => session ? setJoinModal(true) : router.push('/login')}
                 >
-                  {isFull ? 'המשחק מלא' : !session ? 'התחבר כדי להצטרף' : 'בקש להצטרף'}
+                  {!session ? 'התחבר כדי להצטרף' :
+                   isFull ? 'הצטרף לרשימת ההמתנה' : 'בקש להצטרף'}
                 </Button>
               )}
 
@@ -270,6 +325,12 @@ export default function GameDetailPage() {
                 <MessageCircle className="w-4 h-4" />
                 שלח הודעה למארח
               </Button>
+            </div>
+          )}
+
+          {isCancelled && !isHost && (
+            <div className="glass-card rounded-2xl p-5 border border-red-500/30 text-center">
+              <p className="text-red-400 text-sm font-semibold">המשחק בוטל</p>
             </div>
           )}
 
@@ -291,8 +352,13 @@ export default function GameDetailPage() {
       </div>
 
       {/* Join Request Modal */}
-      <Modal isOpen={joinModal} onClose={() => setJoinModal(false)} title="בקשת הצטרפות למשחק">
+      <Modal isOpen={joinModal} onClose={() => setJoinModal(false)} title={isFull ? 'הצטרף לרשימת ההמתנה' : 'בקשת הצטרפות למשחק'}>
         <div className="space-y-4">
+          {isFull && (
+            <div className="p-3 bg-gold-500/10 border border-gold-500/30 rounded-xl text-gold-400 text-sm">
+              המשחק מלא. אם יתפנה מקום תקבל התראה ובקשתך תעבור לממתין.
+            </div>
+          )}
           <p className="text-poker-muted text-sm">שלח הודעה קצרה למארח (אופציונלי)</p>
           <Textarea
             rows={3}
@@ -303,7 +369,37 @@ export default function GameDetailPage() {
           {error && <p className="text-red-400 text-sm text-center">{error}</p>}
           <div className="flex gap-3">
             <Button variant="outline" fullWidth onClick={() => setJoinModal(false)}>ביטול</Button>
-            <Button fullWidth loading={joining} onClick={handleJoinRequest}>שלח בקשה</Button>
+            <Button fullWidth loading={joining} onClick={handleJoinRequest}>
+              {isFull ? 'הצטרף לרשימה' : 'שלח בקשה'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Cancel Game Modal */}
+      <Modal isOpen={cancelModal} onClose={() => setCancelModal(false)} title="ביטול משחק">
+        <div className="space-y-4">
+          {hoursUntilGame < 3 && (
+            <div className="flex items-start gap-3 p-3 bg-red-500/10 border border-red-500/30 rounded-xl">
+              <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+              <p className="text-red-400 text-sm">
+                המשחק מתחיל בפחות מ-3 שעות. ביטול כעת יסב לך <strong>סטרייק</strong>. 3 סטריקים ב-60 יום ייחסמו אותך מפרסום משחקים למשך 30 יום.
+              </p>
+            </div>
+          )}
+          <p className="text-poker-muted text-sm">
+            כל השחקנים המאושרים יקבלו הודעה על הביטול. פעולה זו אינה הפיכה.
+          </p>
+          <div className="flex gap-3">
+            <Button variant="outline" fullWidth onClick={() => setCancelModal(false)}>חזור</Button>
+            <Button
+              fullWidth
+              loading={cancelling}
+              onClick={handleCancelGame}
+              className="bg-red-500/20 text-red-400 border border-red-500/30 hover:bg-red-500/30"
+            >
+              בטל משחק
+            </Button>
           </div>
         </div>
       </Modal>

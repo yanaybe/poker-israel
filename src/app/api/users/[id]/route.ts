@@ -12,11 +12,13 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
       city: true,
       skillLevel: true,
       image: true,
+      canHostUntil: true,
       createdAt: true,
       _count: {
         select: {
           gamesHosted: true,
           gameRequests: true,
+          strikes: true,
         },
       },
     },

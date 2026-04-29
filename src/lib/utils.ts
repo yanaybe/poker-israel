@@ -54,6 +54,7 @@ export function getStatusColor(status: string): string {
     case 'OPEN': return 'text-green-400 bg-green-400/10 border-green-400/30'
     case 'FULL': return 'text-red-400 bg-red-400/10 border-red-400/30'
     case 'CLOSED': return 'text-poker-subtle bg-felt-800/50 border-felt-700/30'
+    case 'CANCELLED': return 'text-red-400 bg-red-400/10 border-red-400/30'
     default: return 'text-poker-muted bg-felt-700/50 border-felt-600/30'
   }
 }
