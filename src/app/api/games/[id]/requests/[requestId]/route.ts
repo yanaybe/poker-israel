@@ -19,33 +19,48 @@ export async function PATCH(
     return NextResponse.json({ error: 'סטטוס לא תקין' }, { status: 400 })
   }
 
+  // Fetch request BEFORE updating to capture previous status and userId
+  const request = await prisma.gameRequest.findUnique({
+    where: { id: params.requestId },
+    select: { userId: true, status: true },
+  })
+  if (!request) return NextResponse.json({ error: 'בקשה לא נמצאה' }, { status: 404 })
+
+  const prevStatus = request.status
+
   const updated = await prisma.gameRequest.update({
     where: { id: params.requestId },
     data: { status },
   })
 
-  // Update player count when approved/rejected
   if (status === 'APPROVED') {
     await prisma.game.update({
       where: { id: params.id },
       data: { currentPlayers: { increment: 1 } },
     })
-
-    // Auto-set to FULL if reached max
     const refreshed = await prisma.game.findUnique({ where: { id: params.id } })
     if (refreshed && refreshed.currentPlayers >= refreshed.maxPlayers) {
       await prisma.game.update({ where: { id: params.id }, data: { status: 'FULL' } })
     }
-  } else if (status === 'REJECTED') {
-    // Decrement only if was previously approved
-    const prev = await prisma.gameRequest.findUnique({ where: { id: params.requestId } })
-    if (prev?.status === 'APPROVED') {
-      await prisma.game.update({
-        where: { id: params.id },
-        data: { currentPlayers: { decrement: 1 }, status: 'OPEN' },
-      })
-    }
+  } else if (status === 'REJECTED' && prevStatus === 'APPROVED') {
+    await prisma.game.update({
+      where: { id: params.id },
+      data: { currentPlayers: { decrement: 1 }, status: 'OPEN' },
+    })
   }
+
+  // Notify the requesting user
+  await prisma.notification.create({
+    data: {
+      userId: request.userId,
+      type: status === 'APPROVED' ? 'REQUEST_APPROVED' : 'REQUEST_REJECTED',
+      message:
+        status === 'APPROVED'
+          ? `✅ הבקשתך להצטרף ל"${game.title}" אושרה!`
+          : `❌ הבקשתך להצטרף ל"${game.title}" נדחתה`,
+      gameId: params.id,
+    },
+  })
 
   return NextResponse.json(updated)
 }

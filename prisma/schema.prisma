@@ -23,6 +23,7 @@ model User {
   gameRequests     GameRequest[]
   sentMessages     Message[]     @relation("SentMessages")
   receivedMessages Message[]     @relation("ReceivedMessages")
+  notifications    Notification[]
 }
 
 model Game {
@@ -72,6 +73,17 @@ model Message {
   content    String
   read       Boolean  @default(false)
   createdAt  DateTime @default(now())
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  message   String
+  gameId    String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
 }
 
 model Tournament {

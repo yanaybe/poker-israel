@@ -9,6 +9,24 @@ export async function GET(req: Request) {
   const city = searchParams.get('city')
   const gameType = searchParams.get('gameType')
   const status = searchParams.get('status')
+  const joinedUserId = searchParams.get('joinedUserId')
+
+  // Return games where a specific user has an approved request
+  if (joinedUserId) {
+    const requests = await prisma.gameRequest.findMany({
+      where: { userId: joinedUserId, status: 'APPROVED' },
+      include: {
+        game: {
+          include: {
+            host: { select: { id: true, name: true, image: true, city: true, skillLevel: true } },
+            _count: { select: { requests: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    })
+    return NextResponse.json(requests.map((r) => r.game))
+  }
 
   const where: Record<string, unknown> = {}
   if (hostId) where.hostId = hostId

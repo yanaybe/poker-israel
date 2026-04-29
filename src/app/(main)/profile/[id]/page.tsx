@@ -18,6 +18,10 @@ export default function ProfilePage() {
   const { data: session } = useSession()
   const [user, setUser] = useState<UserProfile | null>(null)
   const [hostedGames, setHostedGames] = useState<GameWithHost[]>([])
+  const [upcomingGames, setUpcomingGames] = useState<GameWithHost[]>([])
+  const [upcomingLoaded, setUpcomingLoaded] = useState(false)
+  const [upcomingLoading, setUpcomingLoading] = useState(false)
+  const [activeTab, setActiveTab] = useState<'hosted' | 'upcoming'>('hosted')
   const [loading, setLoading] = useState(true)
 
   const isOwn = session?.user?.id === id
@@ -37,6 +41,18 @@ export default function ProfilePage() {
     }
     load()
   }, [id])
+
+  const loadUpcoming = async () => {
+    if (upcomingLoaded) return
+    setUpcomingLoading(true)
+    try {
+      const res = await fetch(`/api/games?joinedUserId=${id}`)
+      if (res.ok) setUpcomingGames(await res.json())
+    } finally {
+      setUpcomingLoading(false)
+      setUpcomingLoaded(true)
+    }
+  }
 
   if (loading) return <LoadingSpinner text="טוען פרופיל..." className="min-h-[60vh]" />
 
@@ -114,35 +130,90 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* Hosted Games */}
-      <div>
-        <h2 className="text-xl font-bold text-poker-text mb-4">
-          {isOwn ? 'המשחקים שלי' : `משחקים של ${user.name}`}
-          {hostedGames.length > 0 && (
-            <span className="mr-2 text-sm text-poker-muted font-normal">({hostedGames.length})</span>
-          )}
-        </h2>
-
-        {hostedGames.length === 0 ? (
-          <div className="glass-card rounded-2xl p-10 border border-felt-700/50 text-center">
-            <div className="text-4xl mb-3">🃏</div>
-            <p className="text-poker-muted">
-              {isOwn ? 'עדיין לא פרסמת משחקים.' : 'עדיין אין משחקים.'}
-            </p>
-            {isOwn && (
-              <Link href="/create-game" className="mt-4 inline-block">
-                <Button size="sm">פרסם משחק ראשון</Button>
-              </Link>
+      {/* Tabs — only for own profile */}
+      {isOwn && (
+        <div className="flex gap-1 mb-4 p-1 bg-felt-900/50 rounded-xl border border-felt-700/50 w-fit">
+          <button
+            onClick={() => setActiveTab('hosted')}
+            className={cn(
+              'px-4 py-2 rounded-lg text-sm font-medium transition-all',
+              activeTab === 'hosted' ? 'bg-gold-500/20 text-gold-400' : 'text-poker-muted hover:text-poker-text'
             )}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {hostedGames.map((game) => (
-              <GameCard key={game.id} game={game} compact />
-            ))}
-          </div>
-        )}
-      </div>
+          >
+            🃏 המשחקים שלי
+          </button>
+          <button
+            onClick={() => { setActiveTab('upcoming'); loadUpcoming() }}
+            className={cn(
+              'px-4 py-2 rounded-lg text-sm font-medium transition-all',
+              activeTab === 'upcoming' ? 'bg-gold-500/20 text-gold-400' : 'text-poker-muted hover:text-poker-text'
+            )}
+          >
+            📅 המשחקים הבאים שלי
+          </button>
+        </div>
+      )}
+
+      {/* Tab content / other profiles */}
+      {(!isOwn || activeTab === 'hosted') && (
+        <div>
+          <h2 className="text-xl font-bold text-poker-text mb-4">
+            {isOwn ? 'המשחקים שלי' : `משחקים של ${user.name}`}
+            {hostedGames.length > 0 && (
+              <span className="mr-2 text-sm text-poker-muted font-normal">({hostedGames.length})</span>
+            )}
+          </h2>
+          {hostedGames.length === 0 ? (
+            <div className="glass-card rounded-2xl p-10 border border-felt-700/50 text-center">
+              <div className="text-4xl mb-3">🃏</div>
+              <p className="text-poker-muted">
+                {isOwn ? 'עדיין לא פרסמת משחקים.' : 'עדיין אין משחקים.'}
+              </p>
+              {isOwn && (
+                <Link href="/create-game" className="mt-4 inline-block">
+                  <Button size="sm">פרסם משחק ראשון</Button>
+                </Link>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {hostedGames.map((game) => (
+                <GameCard key={game.id} game={game} compact />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {isOwn && activeTab === 'upcoming' && (
+        <div>
+          <h2 className="text-xl font-bold text-poker-text mb-4">
+            המשחקים הבאים שלי
+            {upcomingGames.length > 0 && (
+              <span className="mr-2 text-sm text-poker-muted font-normal">({upcomingGames.length})</span>
+            )}
+          </h2>
+          {upcomingLoading ? (
+            <div className="glass-card rounded-2xl p-10 border border-felt-700/50 text-center">
+              <p className="text-poker-muted text-sm">טוען...</p>
+            </div>
+          ) : upcomingGames.length === 0 ? (
+            <div className="glass-card rounded-2xl p-10 border border-felt-700/50 text-center">
+              <div className="text-4xl mb-3">📅</div>
+              <p className="text-poker-muted">עדיין לא אושרת למשחקים.</p>
+              <Link href="/games" className="mt-4 inline-block">
+                <Button size="sm">חפש משחקים</Button>
+              </Link>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {upcomingGames.map((game) => (
+                <GameCard key={game.id} game={game} compact />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

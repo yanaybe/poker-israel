@@ -3,17 +3,27 @@
 import Link from 'next/link'
 import { useSession, signOut } from 'next-auth/react'
 import { usePathname } from 'next/navigation'
-import { useState, useEffect } from 'react'
-import { Menu, X, Bell, LogOut, User, PlusCircle } from 'lucide-react'
-import { Avatar } from '@/components/ui/Avatar'
-import { cn } from '@/lib/utils'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { Menu, X, Bell, LogOut, PlusCircle } from 'lucide-react'
+import { cn, formatTimeAgo } from '@/lib/utils'
+import type { GameNotification, PendingRequestNotif } from '@/types'
+
+interface NotifData {
+  count: number
+  pendingRequests: PendingRequestNotif[]
+  notifications: GameNotification[]
+}
+
+const EMPTY: NotifData = { count: 0, pendingRequests: [], notifications: [] }
 
 export function Navbar() {
   const { data: session } = useSession()
   const pathname = usePathname()
   const [menuOpen, setMenuOpen] = useState(false)
-  const [notifCount, setNotifCount] = useState(0)
+  const [showNotifs, setShowNotifs] = useState(false)
+  const [notifData, setNotifData] = useState<NotifData>(EMPTY)
   const [scrolled, setScrolled] = useState(false)
+  const notifRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20)
@@ -22,20 +32,45 @@ export function Navbar() {
   }, [])
 
   useEffect(() => {
-    if (!session) return
-    const fetchNotifs = async () => {
-      try {
-        const res = await fetch('/api/notifications')
-        if (res.ok) {
-          const data = await res.json()
-          setNotifCount(data.count)
-        }
-      } catch {}
+    const handler = (e: MouseEvent) => {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setShowNotifs(false)
+      }
     }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const fetchNotifs = useCallback(async () => {
+    if (!session) return
+    try {
+      const res = await fetch('/api/notifications')
+      if (res.ok) setNotifData(await res.json())
+    } catch {}
+  }, [session])
+
+  useEffect(() => {
     fetchNotifs()
     const interval = setInterval(fetchNotifs, 30000)
     return () => clearInterval(interval)
-  }, [session])
+  }, [fetchNotifs])
+
+  const openNotifs = () => {
+    const opening = !showNotifs
+    setShowNotifs(opening)
+    if (opening && notifData.notifications.some((n) => !n.read)) {
+      fetch('/api/notifications', { method: 'PATCH' }).then(() => fetchNotifs())
+    }
+  }
+
+  const handleAction = async (gameId: string, requestId: string, action: 'APPROVED' | 'REJECTED') => {
+    await fetch(`/api/games/${gameId}/requests/${requestId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: action }),
+    })
+    fetchNotifs()
+  }
 
   const navLinks = [
     { href: '/games', label: 'משחקים', icon: '🃏' },
@@ -53,9 +88,9 @@ export function Navbar() {
     )}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between h-16">
-          {/* Left side: auth actions or hamburger */}
+
+          {/* Left: auth / hamburger */}
           <div className="flex items-center gap-3">
-            {/* Mobile menu button */}
             <button
               className="lg:hidden p-2 text-poker-muted hover:text-poker-text rounded-lg hover:bg-felt-800/50 transition-all"
               onClick={() => setMenuOpen(!menuOpen)}
@@ -64,7 +99,6 @@ export function Navbar() {
               {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
 
-            {/* Desktop: auth */}
             <div className="hidden lg:flex items-center gap-2">
               {session ? (
                 <>
@@ -73,14 +107,83 @@ export function Navbar() {
                     <span>פרסם משחק</span>
                   </Link>
 
-                  <div className="relative">
-                    <Link href="/messages" className="p-2 text-poker-muted hover:text-poker-text rounded-lg hover:bg-felt-800/50 transition-all block">
+                  {/* Bell + notification dropdown */}
+                  <div className="relative" ref={notifRef}>
+                    <button
+                      onClick={openNotifs}
+                      className="p-2 text-poker-muted hover:text-poker-text rounded-lg hover:bg-felt-800/50 transition-all"
+                    >
                       <Bell className="w-5 h-5" />
-                    </Link>
-                    {notifCount > 0 && (
-                      <span className="notification-dot">
-                        <span className="sr-only">{notifCount} התראות</span>
+                    </button>
+                    {notifData.count > 0 && (
+                      <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] bg-gold-500 text-poker-bg text-[10px] font-bold rounded-full flex items-center justify-center px-1">
+                        {notifData.count > 9 ? '9+' : notifData.count}
                       </span>
+                    )}
+
+                    {showNotifs && (
+                      <div className="absolute top-10 left-0 w-80 z-50 glass-card border border-felt-700/50 rounded-2xl shadow-xl overflow-hidden animate-slide-up">
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-felt-700/50">
+                          <span className="font-bold text-sm text-poker-text">התראות</span>
+                          {notifData.count > 0 && (
+                            <span className="text-xs px-2 py-0.5 bg-gold-500/20 text-gold-400 rounded-full">
+                              {notifData.count} חדשות
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="max-h-80 overflow-y-auto divide-y divide-felt-700/30">
+                          {notifData.pendingRequests.length === 0 && notifData.notifications.length === 0 ? (
+                            <div className="p-8 text-center text-poker-subtle text-sm">אין התראות</div>
+                          ) : (
+                            <>
+                              {notifData.pendingRequests.map((req) => (
+                                <div key={req.id} className="p-4">
+                                  <p className="text-xs text-poker-subtle mb-1">בקשת הצטרפות</p>
+                                  <p className="text-sm text-poker-text mb-1">
+                                    <span className="font-semibold">{req.user.name}</span>
+                                    {' '}ביקש להצטרף ל
+                                    <span className="text-gold-400">"{req.gameName}"</span>
+                                  </p>
+                                  {req.message && (
+                                    <p className="text-xs text-poker-subtle italic mb-2">"{req.message}"</p>
+                                  )}
+                                  <div className="flex gap-2 mt-2">
+                                    <button
+                                      onClick={() => handleAction(req.gameId, req.id, 'APPROVED')}
+                                      className="flex-1 py-1.5 text-xs font-semibold bg-green-500/20 text-green-400 hover:bg-green-500/30 rounded-lg transition-all"
+                                    >
+                                      ✓ אשר
+                                    </button>
+                                    <button
+                                      onClick={() => handleAction(req.gameId, req.id, 'REJECTED')}
+                                      className="flex-1 py-1.5 text-xs font-semibold bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-lg transition-all"
+                                    >
+                                      ✗ דחה
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+
+                              {notifData.notifications.map((n) => (
+                                <Link
+                                  key={n.id}
+                                  href={n.gameId ? `/games/${n.gameId}` : '#'}
+                                  onClick={() => setShowNotifs(false)}
+                                >
+                                  <div className={cn(
+                                    'p-4 hover:bg-felt-800/30 transition-all cursor-pointer',
+                                    !n.read && 'bg-gold-500/5'
+                                  )}>
+                                    <p className="text-sm text-poker-text">{n.message}</p>
+                                    <p className="text-xs text-poker-subtle mt-1">{formatTimeAgo(n.createdAt)}</p>
+                                  </div>
+                                </Link>
+                              ))}
+                            </>
+                          )}
+                        </div>
+                      </div>
                     )}
                   </div>
 

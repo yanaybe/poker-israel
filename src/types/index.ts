@@ -140,6 +140,24 @@ export interface MessageWithUsers {
   }
 }
 
+export interface GameNotification {
+  id: string
+  type: string
+  message: string
+  gameId?: string | null
+  read: boolean
+  createdAt: string
+}
+
+export interface PendingRequestNotif {
+  id: string
+  gameId: string
+  gameName: string
+  message?: string | null
+  createdAt: string
+  user: { id: string; name: string; image?: string | null }
+}
+
 export interface TournamentData {
   id: string
   name: string
