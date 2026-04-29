@@ -122,7 +122,7 @@ export function Navbar() {
                     )}
 
                     {showNotifs && (
-                      <div className="absolute top-10 left-0 w-80 z-50 glass-card border border-felt-700/50 rounded-2xl shadow-xl overflow-hidden animate-slide-up">
+                      <div className="absolute top-10 right-0 w-80 z-50 glass-card border border-felt-700/50 rounded-2xl shadow-xl overflow-hidden animate-slide-up">
                         <div className="flex items-center justify-between px-4 py-3 border-b border-felt-700/50">
                           <span className="font-bold text-sm text-poker-text">התראות</span>
                           {notifData.count > 0 && (
