@@ -56,12 +56,22 @@ export function GameCard({ game, compact }: GameCardProps) {
             <Avatar name={game.host.name} image={game.host.image} size="sm" />
             <div className="min-w-0">
               <p className="text-sm font-semibold text-poker-text truncate">{game.host.name}</p>
-              <p className="text-xs text-poker-muted">
-                {SKILL_LABELS[game.host.skillLevel]}
-                {hostGames > 0 && <span className="mr-1 text-poker-subtle">· {hostGames} משחקים</span>}
+              {/* Quick stats line */}
+              <p className="text-xs text-poker-muted flex flex-wrap items-center gap-x-1.5 mt-0.5">
+                {game.host.avgRating != null && (
+                  <span className="text-gold-400 font-medium">{game.host.avgRating}★</span>
+                )}
+                {hostGames > 0 && (
+                  <span className="text-poker-subtle">{hostGames} משחקים</span>
+                )}
+                {hostStrikes > 0 ? (
+                  <span className="text-red-400">{hostStrikes} ביטולים</span>
+                ) : hostGames > 0 ? (
+                  <span className="text-green-400">0 ביטולים</span>
+                ) : null}
               </p>
-              {hostStrikes > 0 && (
-                <p className="text-xs text-red-400">{hostStrikes} ביטולים מאוחרים</p>
+              {!game.host.avgRating && hostGames === 0 && (
+                <p className="text-xs text-poker-muted">{SKILL_LABELS[game.host.skillLevel]}</p>
               )}
             </div>
           </div>

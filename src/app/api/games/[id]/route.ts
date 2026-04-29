@@ -3,7 +3,9 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, { params }: { params: { id: string } }) {
+  const session = await getServerSession(authOptions)
+
   const game = await prisma.game.findUnique({
     where: { id: params.id },
     include: {
@@ -11,6 +13,7 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
         select: {
           id: true, name: true, image: true, city: true, skillLevel: true, canHostUntil: true,
           _count: { select: { strikes: true, gamesHosted: true } },
+          ratingsReceived: { select: { score: true } },
         },
       },
       requests: {
@@ -24,6 +27,21 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   })
 
   if (!game) return NextResponse.json({ error: 'משחק לא נמצא' }, { status: 404 })
+
+  // Address reveal: hidden until 2h before for approved players; host always sees it
+  const isHost = session?.user?.id === game.hostId
+  const hoursUntilGame = (game.dateTime.getTime() - Date.now()) / 3600000
+  let locationRevealed = isHost
+
+  if (!locationRevealed && session?.user?.id) {
+    const approved = await prisma.gameRequest.findFirst({
+      where: { gameId: params.id, userId: session.user.id, status: 'APPROVED' },
+    })
+    locationRevealed = !!approved && hoursUntilGame <= 2
+  }
+
+  // Backward compat: if no neighborhood, always expose location
+  const hasNeighborhood = !!game.neighborhood
 
   // Compute host stats
   const hostId = game.hostId
@@ -47,8 +65,13 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const returning = Object.values(playerCount).filter((c) => c > 1).length
   const returnRate = uniquePlayers >= 3 ? Math.round((returning / uniquePlayers) * 100) : null
 
+  const { ratingsReceived: _, ...hostWithoutRaw } = game.host
+
   return NextResponse.json({
     ...game,
+    host: { ...hostWithoutRaw, avgRating },
+    location: (!hasNeighborhood || locationRevealed) ? game.location : null,
+    locationRevealed: !hasNeighborhood || locationRevealed,
     hostStats: {
       gamesHosted: game.host._count.gamesHosted,
       lateStrikes: game.host._count.strikes,

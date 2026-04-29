@@ -32,7 +32,8 @@ const DURATION_OPTIONS = [
 
 const schema = z.object({
   title: z.string().min(3, 'כותרת חייבת להכיל לפחות 3 תווים'),
-  location: z.string().min(2, 'נא להזין מיקום'),
+  neighborhood: z.string().min(2, 'נא להזין שכונה/אזור'),
+  location: z.string().min(2, 'נא להזין כתובת מדויקת'),
   city: z.string().min(1, 'נא לבחור עיר'),
   dateTime: z.string().min(1, 'נא לבחור תאריך ושעה'),
   buyIn: z.string().min(1, 'נא להזין ביי-אין').refine((v) => parseInt(v) >= 0, 'ביי-אין לא תקין'),
@@ -96,6 +97,7 @@ export default function CreateGamePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...data,
+          neighborhood: data.neighborhood,
           buyIn: parseInt(data.buyIn),
           maxPlayers: maxP,
           currentPlayers: 1 + existing,
@@ -149,10 +151,11 @@ export default function CreateGamePage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Input
-              label="מיקום מדויק"
-              placeholder="רחוב האלון 12, קומה 3"
-              {...register('location')}
-              error={errors.location?.message}
+              label="שכונה / אזור (גלוי לכולם)"
+              placeholder="צפון תל אביב"
+              hint="לדוגמה: רמת החייל, פלורנטין, הכרמל"
+              {...register('neighborhood')}
+              error={errors.neighborhood?.message}
             />
             <Select
               label="עיר"
@@ -162,6 +165,13 @@ export default function CreateGamePage() {
               options={ISRAELI_CITIES.map((c) => ({ value: c, label: c }))}
             />
           </div>
+          <Input
+            label="כתובת מדויקת (נחשפת למאושרים 2 שעות לפני)"
+            placeholder="רחוב האלון 12, קומה 3"
+            hint="🔒 לא מוצגת לשחקנים עד שעתיים לפני המשחק"
+            {...register('location')}
+            error={errors.location?.message}
+          />
 
           <Input
             label="תאריך ושעה"

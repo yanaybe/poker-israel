@@ -11,6 +11,23 @@ export async function GET(req: Request) {
   const status = searchParams.get('status')
   const joinedUserId = searchParams.get('joinedUserId')
 
+  const hostSelect = {
+    id: true, name: true, image: true, city: true, skillLevel: true,
+    _count: { select: { strikes: true, gamesHosted: true } },
+    ratingsReceived: { select: { score: true } },
+  }
+
+  const addAvgRating = <T extends { host: { ratingsReceived: { score: number }[] } }>(games: T[]) =>
+    games.map(({ host: { ratingsReceived, ...host }, ...g }) => ({
+      ...g,
+      host: {
+        ...host,
+        avgRating: ratingsReceived.length > 0
+          ? Math.round((ratingsReceived.reduce((s, r) => s + r.score, 0) / ratingsReceived.length) * 10) / 10
+          : null,
+      },
+    }))
+
   // Return games where a specific user has an approved request
   if (joinedUserId) {
     const requestStatus = searchParams.get('requestStatus') ?? 'APPROVED'
@@ -19,19 +36,14 @@ export async function GET(req: Request) {
       include: {
         game: {
           include: {
-            host: {
-              select: {
-                id: true, name: true, image: true, city: true, skillLevel: true,
-                _count: { select: { strikes: true, gamesHosted: true } },
-              },
-            },
+            host: { select: hostSelect },
             _count: { select: { requests: true } },
           },
         },
       },
       orderBy: { createdAt: 'asc' },
     })
-    return NextResponse.json(requests.map((r) => r.game))
+    return NextResponse.json(addAvgRating(requests.map((r) => r.game)))
   }
 
   const where: Record<string, unknown> = {}
@@ -43,18 +55,13 @@ export async function GET(req: Request) {
   const games = await prisma.game.findMany({
     where,
     include: {
-      host: {
-        select: {
-          id: true, name: true, image: true, city: true, skillLevel: true,
-          _count: { select: { strikes: true, gamesHosted: true } },
-        },
-      },
+      host: { select: hostSelect },
       _count: { select: { requests: true } },
     },
     orderBy: { dateTime: 'asc' },
   })
 
-  return NextResponse.json(games)
+  return NextResponse.json(addAvgRating(games))
 }
 
 export async function POST(req: Request) {
@@ -78,7 +85,7 @@ export async function POST(req: Request) {
   try {
     const body = await req.json()
     const {
-      title, location, city, dateTime, buyIn, gameType, stakes,
+      title, neighborhood, location, city, dateTime, buyIn, gameType, stakes,
       houseFeeType, houseFee, houseFeePct, houseFeeMax,
       maxPlayers, currentPlayers, notes,
       stackMin, stackMax, rebuyType, rebuyCap, gamePace, vibeTags, expectedDuration,
@@ -93,6 +100,7 @@ export async function POST(req: Request) {
       data: {
         hostId: session.user.id,
         title,
+        neighborhood: neighborhood ?? null,
         location,
         city,
         dateTime: new Date(dateTime),

@@ -83,7 +83,9 @@ export interface UserProfile {
 export interface GameWithHost {
   id: string
   title: string
-  location: string
+  neighborhood?: string | null
+  location: string | null
+  locationRevealed?: boolean
   city: string
   dateTime: string
   buyIn: number
@@ -115,6 +117,7 @@ export interface GameWithHost {
     city?: string | null
     skillLevel: SkillLevel
     canHostUntil?: string | null
+    avgRating?: number | null
     _count?: { strikes: number; gamesHosted: number }
   }
   requests?: GameRequestWithUser[]

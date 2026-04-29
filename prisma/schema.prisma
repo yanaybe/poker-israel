@@ -43,6 +43,7 @@ model Game {
   hostId         String
   host           User     @relation("GameHost", fields: [hostId], references: [id], onDelete: Cascade)
   title          String
+  neighborhood   String?
   location       String
   city           String
   dateTime       DateTime
