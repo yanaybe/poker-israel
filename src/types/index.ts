@@ -230,6 +230,28 @@ export interface PendingRequestNotif {
   user: { id: string; name: string; image?: string | null }
 }
 
+export interface LfgPost {
+  id: string
+  userId: string
+  city: string
+  availableText: string
+  buyIn?: number | null
+  gameTypes?: string | null
+  notes?: string | null
+  status: string
+  expiresAt: string
+  createdAt: string
+  user: {
+    id: string
+    name: string
+    image?: string | null
+    skillLevel: SkillLevel
+    city?: string | null
+    avgRating: number | null
+    totalRatings: number
+  }
+}
+
 export interface TournamentData {
   id: string
   name: string

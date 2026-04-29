@@ -74,6 +74,7 @@ export function Navbar() {
 
   const navLinks = [
     { href: '/games', label: 'משחקים', icon: '🃏' },
+    { href: '/lfg', label: 'מחפשים', icon: '🔍' },
     { href: '/tournaments', label: 'טורנירים', icon: '🏆' },
     ...(session ? [
       { href: '/messages', label: 'הודעות', icon: '💬' },
