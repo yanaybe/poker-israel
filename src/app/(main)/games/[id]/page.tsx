@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useSession } from 'next-auth/react'
 import Link from 'next/link'
-import { MapPin, Clock, Users, DollarSign, MessageCircle, ArrowRight, Check, X, Pencil, AlertTriangle, Star, Lock, Unlock, Zap } from 'lucide-react'
+import { MapPin, Clock, Users, DollarSign, MessageCircle, ArrowRight, Check, X, Pencil, AlertTriangle, Star, Lock, Unlock, Zap, UserRound, Plus } from 'lucide-react'
 import { Avatar } from '@/components/ui/Avatar'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
@@ -44,6 +44,98 @@ function DimRow({ label, value, onChange }: { label: string; value: number; onCh
     <div className="flex items-center justify-between gap-3 py-2">
       <span className="text-sm text-poker-muted w-32 text-right shrink-0">{label}</span>
       <StarRating value={value} onChange={onChange} />
+    </div>
+  )
+}
+
+interface LineupPlayer { id: string; name: string; image?: string | null }
+
+function LineupPreview({
+  host, approvedPlayers, currentPlayers, maxPlayers, currentUserId, isCancelled,
+}: {
+  host: LineupPlayer
+  approvedPlayers: LineupPlayer[]
+  currentPlayers: number
+  maxPlayers: number
+  currentUserId?: string
+  isCancelled: boolean
+}) {
+  // offline = seats occupied by non-app players (host + app-approved accounted for)
+  const offlineCount = Math.max(0, currentPlayers - 1 - approvedPlayers.length)
+  const emptyCount = Math.max(0, maxPlayers - currentPlayers)
+  const currentUserIn = approvedPlayers.some((p) => p.id === currentUserId)
+
+  return (
+    <div className="glass-card rounded-2xl p-6 border border-felt-700/50">
+      <div className="flex items-center justify-between mb-5">
+        <h3 className="text-base font-bold text-poker-text">🎲 ליין-אפ</h3>
+        <span className="text-xs text-poker-muted">{currentPlayers}/{maxPlayers} שחקנים</span>
+      </div>
+
+      <div className="flex flex-wrap gap-4 mb-4">
+        {/* Host */}
+        <div className="flex flex-col items-center gap-1.5 w-12">
+          <div className="relative">
+            <Avatar name={host.name} image={host.image} size="sm" />
+            <span className="absolute -top-1.5 -right-1 text-base leading-none">♛</span>
+          </div>
+          <p className="text-xs text-poker-muted truncate w-full text-center">{host.name.split(' ')[0]}</p>
+        </div>
+
+        {/* App players */}
+        {approvedPlayers.map((p) => (
+          <div key={p.id} className="flex flex-col items-center gap-1.5 w-12">
+            <div className={cn(
+              'rounded-full',
+              p.id === currentUserId && 'ring-2 ring-gold-500 ring-offset-2 ring-offset-felt-900'
+            )}>
+              <Avatar name={p.name} image={p.image} size="sm" />
+            </div>
+            <p className={cn('text-xs truncate w-full text-center', p.id === currentUserId ? 'text-gold-400 font-semibold' : 'text-poker-muted')}>
+              {p.id === currentUserId ? 'אתה' : p.name.split(' ')[0]}
+            </p>
+          </div>
+        ))}
+
+        {/* Offline / non-app players */}
+        {Array.from({ length: offlineCount }).map((_, i) => (
+          <div key={`offline-${i}`} className="flex flex-col items-center gap-1.5 w-12">
+            <div className="w-8 h-8 rounded-full bg-felt-800 border-2 border-felt-700 flex items-center justify-center" title="שחקן לא מהאפליקציה">
+              <UserRound className="w-4 h-4 text-felt-600" />
+            </div>
+            <p className="text-xs text-poker-subtle truncate w-full text-center">אורח</p>
+          </div>
+        ))}
+
+        {/* Empty seats */}
+        {!isCancelled && Array.from({ length: Math.min(emptyCount, 4) }).map((_, i) => (
+          <div key={`empty-${i}`} className="flex flex-col items-center gap-1.5 w-12">
+            <div className="w-8 h-8 rounded-full border-2 border-dashed border-felt-700/60 flex items-center justify-center">
+              <Plus className="w-3.5 h-3.5 text-felt-600" />
+            </div>
+            <p className="text-xs text-poker-subtle truncate w-full text-center">פנוי</p>
+          </div>
+        ))}
+        {!isCancelled && emptyCount > 4 && (
+          <div className="flex flex-col items-center gap-1.5 w-12">
+            <div className="w-8 h-8 rounded-full border-2 border-dashed border-felt-700/60 flex items-center justify-center">
+              <span className="text-xs text-felt-600 font-bold">+{emptyCount - 4}</span>
+            </div>
+            <p className="text-xs text-poker-subtle truncate w-full text-center">פנויים</p>
+          </div>
+        )}
+      </div>
+
+      {/* Commitment line */}
+      <p className="text-xs text-poker-muted text-center pt-3 border-t border-felt-700/30">
+        {isCancelled
+          ? '❌ המשחק בוטל'
+          : currentUserIn
+            ? `✅ אתה${approvedPlayers.length > 1 ? ` + ${approvedPlayers.length - 1} שחקנים נוספים` : ''} מאושרים`
+            : approvedPlayers.length > 0
+              ? `${approvedPlayers.length + 1} שחקנים אושרו עד כה${emptyCount > 0 ? ` · נותרו ${emptyCount} מקומות` : ' · המשחק מלא'}`
+              : `רק המארח עד כה · ${maxPlayers - 1} מקומות פנויים`}
+      </p>
     </div>
   )
 }
@@ -346,6 +438,16 @@ export default function GameDetailPage() {
             )}
           </div>
 
+          {/* Lineup Preview */}
+          <LineupPreview
+            host={{ id: game.host.id, name: game.host.name, image: game.host.image }}
+            approvedPlayers={approvedRequests.map((r) => ({ id: r.userId, name: r.user.name, image: r.user.image }))}
+            currentPlayers={game.currentPlayers}
+            maxPlayers={game.maxPlayers}
+            currentUserId={session?.user?.id}
+            isCancelled={isCancelled}
+          />
+
           {/* Transparency Card */}
           {(game.stackMin || game.gamePace || game.rebuyType || game.vibeTags || game.expectedDuration || game.hasFood || game.hasDrinks) && (
             <div className="glass-card rounded-2xl p-6 border border-felt-700/50">
@@ -610,19 +712,6 @@ export default function GameDetailPage() {
             </div>
           )}
 
-          {approvedRequests.length > 0 && (
-            <div className="glass-card rounded-2xl p-5 border border-felt-700/50">
-              <h3 className="text-sm font-semibold text-poker-muted mb-3">שחקנים מאושרים</h3>
-              <div className="space-y-2">
-                {approvedRequests.map((req) => (
-                  <div key={req.id} className="flex items-center gap-2">
-                    <Avatar name={req.user.name} image={req.user.image} size="xs" />
-                    <span className="text-sm text-poker-text">{req.user.name}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
