@@ -1,9 +1,9 @@
 # MASTER LAUNCH CHECKLIST
 ## Poker Israel — Pre-Production Engineering Mission
 
-> **STATUS: NOT LAUNCH READY**
-> Current launch readiness score: 3/10
-> Estimated time to production-ready: 3–4 weeks of focused engineering
+> **STATUS: IN PROGRESS — CRITICAL SECURITY FIXES APPLIED**
+> Current launch readiness score: 5/10
+> Estimated time to production-ready: 2–3 weeks of focused engineering
 
 ---
 
@@ -11,31 +11,31 @@
 *Nothing ships until every item here is done.*
 
 ### Security
-- [ ] **[SEC-001]** Add authentication check to `POST /api/tournaments` — currently unauthenticated
-- [ ] **[SEC-002]** Fix webhook signature verification — always verify, never skip based on NODE_ENV
-- [ ] **[SEC-003]** Fix webhook bypass: reject requests with empty/missing signature header
+- [x] **[SEC-001]** Add authentication check to `POST /api/tournaments` — now requires session + isAdmin
+- [x] **[SEC-002]** Fix webhook signature verification — always verify, PAYPLUS_SKIP_SIG_VERIFY flag for local dev only
+- [x] **[SEC-003]** Fix webhook bypass: reject requests with empty/missing signature header (returns 401)
 - [ ] **[SEC-004]** Add rate limiting to `/api/auth/*` endpoints (max 5/min per IP)
 - [ ] **[SEC-005]** Add rate limiting to `/api/messages/*` (max 30/hr per user)
-- [ ] **[SEC-006]** Add Zod schema validation on ALL POST/PATCH API route bodies
-- [ ] **[SEC-007]** Add backend password strength validation (min 8 chars, not just frontend)
-- [ ] **[SEC-008]** Remove demo credentials from `/login` page entirely
+- [x] **[SEC-006]** Add Zod schema validation on ALL POST/PATCH API route bodies (tournaments, games, join, approval, register, messages, lfg, users/me, games/[id])
+- [x] **[SEC-007]** Add backend password strength validation (min 8 chars + uppercase + number)
+- [x] **[SEC-008]** Remove demo credentials from `/login` page entirely
 
 ### Database & DevOps
-- [ ] **[DB-001]** Replace `prisma db push` in build script with `prisma migrate deploy`
+- [x] **[DB-001]** Replace `prisma db push` in build script with `prisma migrate deploy`
 - [ ] **[DB-002]** Set up proper Prisma migration history (`prisma migrate dev`)
-- [ ] **[DB-003]** Add production guard to `prisma/seed.ts` — prevent running against prod DB
-- [ ] **[DB-004]** Add critical indexes: Game(city, status, dateTime), Message(senderId, receiverId), Strike(userId, createdAt)
+- [x] **[DB-003]** Add production guard to `prisma/seed.ts` — throws if NODE_ENV === 'production'
+- [x] **[DB-004]** Add critical indexes: Game(city, status, dateTime), Message(senderId, receiverId), Strike(userId, createdAt), Notification(userId), GameRequest(userId), LfgPost(city, status)
 - [ ] **[DB-005]** Change database provider from SQLite to PostgreSQL in all environments
 
 ### Legal
 - [ ] **[LEGAL-001]** Create Terms of Service page (`/terms`)
 - [ ] **[LEGAL-002]** Create Privacy Policy page (`/privacy`)
 - [ ] **[LEGAL-003]** Add ToS/Privacy links to footer and registration form
-- [ ] **[LEGAL-004]** Enforce age 18+ on registration (backend validation)
+- [x] **[LEGAL-004]** Enforce age 18+ on registration (backend validation — z.number().min(18))
 
 ### Trust & Safety
-- [ ] **[TS-001]** Add user ban/suspension fields to User model (`isBanned`, `banReason`)
-- [ ] **[TS-002]** Check ban status before allowing login, game join, and message send
+- [x] **[TS-001]** Add user ban/suspension fields to User model (`isBanned`, `banReason`, `bannedAt`, `isAdmin`, `tokenVersion`)
+- [x] **[TS-002]** Check ban status before allowing login, game join, and message send
 
 ---
 
@@ -45,17 +45,17 @@
 ### Authentication & Identity
 - [ ] **[AUTH-001]** Add email verification flow (Resend/SendGrid integration)
 - [ ] **[AUTH-002]** Add password reset flow (email → time-limited token → new password)
-- [ ] **[AUTH-003]** Configure JWT session expiry (`maxAge: 7 * 24 * 60 * 60`)
-- [ ] **[AUTH-004]** Add token version field to User for JWT revocation on ban/password change
+- [x] **[AUTH-003]** Configure JWT session expiry (`maxAge: 7 * 24 * 60 * 60`)
+- [x] **[AUTH-004]** Add token version field to User for JWT revocation on ban/password change
 
 ### API Quality
 - [ ] **[API-001]** Add pagination to `GET /api/games` (cursor-based, limit=20)
 - [ ] **[API-002]** Add pagination to `GET /api/messages` (last 50, load more)
 - [ ] **[API-003]** Add pagination to `GET /api/lfg`
-- [ ] **[API-004]** Fix race condition in game join — wrap in Prisma transaction
-- [ ] **[API-005]** Fix race condition in request approval — wrap in Prisma transaction
-- [ ] **[API-006]** Add input bounds validation (buyIn: 0–100000, maxPlayers: 2–20, dateTime: future only)
-- [ ] **[API-007]** Remove email and canHostUntil from public `GET /api/users/[id]` response
+- [x] **[API-004]** Fix race condition in game join — wrapped in Prisma transaction with ban check
+- [x] **[API-005]** Fix race condition in request approval — wrapped in Prisma transaction with cross-game validation
+- [x] **[API-006]** Add input bounds validation (buyIn: 0–100000, maxPlayers: 2–20, dateTime: future only)
+- [x] **[API-007]** Remove email and canHostUntil from public `GET /api/users/[id]` response (now owner/admin only)
 - [ ] **[API-008]** Add webhook idempotency — store processed transactionUids, skip duplicates
 
 ### Images & Storage
@@ -106,7 +106,7 @@
 ### Routing & Navigation
 - [ ] **[NAV-001]** Create `/games/[id]/edit` page (currently linked from detail page but doesn't exist)
 - [ ] **[NAV-002]** Add Open Graph tags on game detail pages for social sharing
-- [ ] **[NAV-003]** Fix open redirect vulnerability in login callbackUrl validation
+- [x] **[NAV-003]** Fix open redirect vulnerability in login callbackUrl validation (getSafeCallbackUrl validates relative paths only)
 
 ---
 
@@ -127,7 +127,7 @@
 - [ ] **[PERF-005]** Add PostGIS for server-side geo queries (replace client-side Haversine)
 
 ### Security Hardening
-- [ ] **[SEC-H-001]** Add HTTP security headers (CSP, X-Frame-Options, etc.) in next.config.js
+- [x] **[SEC-H-001]** Add HTTP security headers (X-Frame-Options, X-Content-Type-Options, HSTS, Referrer-Policy, Permissions-Policy) in next.config.js
 - [ ] **[SEC-H-002]** Implement user message blocking (Block table + enforcement in messages API)
 - [ ] **[SEC-H-003]** Add 2FA/TOTP support for high-value accounts
 - [ ] **[SEC-H-004]** Implement CSRF tokens on state-changing API routes

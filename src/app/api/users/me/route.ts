@@ -1,59 +1,66 @@
-// TODO [HIGH][Security]:
-// No backend validation on PATCH /api/users/me body.
-// `name` could be empty string or 10,000 characters.
-// `age` could be negative, 0, or 999.
-// `image` could be a 50MB base64 string — no size limit enforced.
-// Fix: Add Zod schema validation:
-//   name: z.string().min(2).max(100)
-//   age: z.number().int().min(18).max(120).nullable()
-//   image: z.string().max(5_000_000).nullable() (5MB base64 limit until S3 migration)
-// Risk: Invalid data stored in DB; potential OOM from huge image strings.
-
-// TODO [HIGH][Security]:
-// Image is stored as base64 string in the database. This is a critical scalability
-// and performance anti-pattern:
-//   1. Every user query includes potentially megabytes of base64 image data
-//   2. DB backups are massive
-//   3. Every API response includes the full image — no CDN optimization possible
-// Fix: Accept image upload via multipart/form-data, upload to Cloudinary or S3,
-// store only the URL in the image field.
-// Risk: DB performance degrades as users upload profile photos.
-
-// TODO [MEDIUM][Backend]:
-// No validation that the city provided is in the approved ISRAELI_CITIES list.
-// A user could set their city to any string, including XSS payloads.
-// Fix: Validate city against ISRAELI_CITIES enum, or sanitize with DOMPurify.
-// Risk: XSS injection via user-provided city name displayed in game cards.
-
-// TODO [MEDIUM][Security]:
-// No rate limiting on profile updates. A user can script rapid PATCH requests
-// to test XSS payloads or flood the DB with updates.
-// Fix: Rate limit: max 10 profile updates per hour per user.
-// Risk: Automated probing or database flooding.
-
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
+import { z } from 'zod'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { ISRAELI_CITIES } from '@/types/index'
+
+// 5MB base64 limit. Base64 encoding adds ~33% overhead, so 5MB string ≈ ~3.75MB image.
+// This is a temporary ceiling until images are migrated to Cloudinary/S3.
+const MAX_IMAGE_BASE64_BYTES = 5_000_000
+
+const UpdateProfileSchema = z.object({
+  name: z.string().min(2, 'שם קצר מדי').max(100, 'שם ארוך מדי').trim().optional(),
+  age: z
+    .number({ invalid_type_error: 'גיל לא תקין' })
+    .int()
+    .min(18, 'יש להיות בן 18 ומעלה')
+    .max(120)
+    .nullable()
+    .optional(),
+  city: z.enum(ISRAELI_CITIES as [string, ...string[]]).nullable().optional(),
+  skillLevel: z.enum(['BEGINNER', 'INTERMEDIATE', 'PRO']).optional(),
+  image: z.string().nullable().optional(),
+})
 
 export async function PATCH(req: Request) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return NextResponse.json({ error: 'נא להתחבר' }, { status: 401 })
 
+  let body: unknown
   try {
-    const { name, age, city, skillLevel, image } = await req.json()
-    // TODO [HIGH][Security]: Add Zod validation here before DB write.
-    // TODO [HIGH][Security]: Enforce image size limit before storing base64.
-    // TODO [HIGH][Backend]: Replace base64 storage — upload to Cloudinary/S3 instead.
+    body = await req.json()
+  } catch {
+    return NextResponse.json({ error: 'בקשה לא תקינה' }, { status: 400 })
+  }
 
+  const parsed = UpdateProfileSchema.safeParse(body)
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: 'נתונים לא תקינים', details: parsed.error.flatten().fieldErrors },
+      { status: 422 }
+    )
+  }
+
+  const { name, age, city, skillLevel, image } = parsed.data
+
+  // Enforce image size limit to prevent DB bloat from large base64 payloads
+  if (image && image.length > MAX_IMAGE_BASE64_BYTES) {
+    return NextResponse.json(
+      { error: 'התמונה גדולה מדי. גודל מקסימלי: 5MB' },
+      { status: 413 }
+    )
+  }
+
+  try {
     const user = await prisma.user.update({
       where: { id: session.user.id },
       data: {
-        ...(name && { name }),
-        age: age ?? null,
-        city: city ?? null,
-        ...(skillLevel && { skillLevel }),
-        image: image ?? null,
+        ...(name !== undefined && { name }),
+        ...(age !== undefined && { age }),
+        ...(city !== undefined && { city }),
+        ...(skillLevel !== undefined && { skillLevel }),
+        ...(image !== undefined && { image }),
       },
       select: {
         id: true,
@@ -67,8 +74,8 @@ export async function PATCH(req: Request) {
     })
 
     return NextResponse.json(user)
-  } catch (error) {
-    console.error('Update user error:', error)
+  } catch (err) {
+    console.error('Update user error:', err)
     return NextResponse.json({ error: 'שגיאה בעדכון הפרופיל' }, { status: 500 })
   }
 }

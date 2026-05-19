@@ -1,95 +1,83 @@
-// TODO [CRITICAL][Backend]:
-// RACE CONDITION: The capacity check and request creation are NOT in a database
-// transaction. If two users join simultaneously:
-//   User A: reads game (currentPlayers=5, max=6) → not full → creates PENDING request
-//   User B: reads game (currentPlayers=5, max=6) → not full → creates PENDING request
-// Both get PENDING status. Host approves both. Game goes over capacity.
-// Fix: Wrap the capacity check + request creation in a Prisma transaction with
-// optimistic locking, or use a SELECT FOR UPDATE on the Game row.
-// Risk: Games go over maximum player capacity — physical safety and trust issue.
-
-// TODO [HIGH][Security]:
-// No rate limiting on join requests. A user can script rapid join requests to
-// multiple games simultaneously, or spam the same game endpoint.
-// Fix: Rate limit: max 10 join requests per user per hour.
-// Risk: Platform spamming, host notification flood.
-
-// TODO [HIGH][Trust & Safety]:
-// No check for user ban/suspension before allowing them to join a game.
-// A banned user with a valid JWT can still send join requests.
-// Fix: Check user.isBanned before creating the request.
-// Risk: Banned/dangerous users can still join games and potentially attend.
-
-// TODO [MEDIUM][Backend]:
-// join message content is not validated or sanitized. A user could send
-// a 10,000-character message or inject HTML/script content.
-// Fix: Validate message: max 500 chars, strip HTML/dangerous content.
-// Risk: Oversized messages bloat DB; potential XSS in admin panels.
-
-// TODO [MEDIUM][UX]:
-// No waitlist position feedback. When a user joins the waitlist,
-// they don't know their position (e.g., "You are #3 of 5 on the waitlist").
-// Fix: Return waitlist position in the response (count WAITLIST requests before this one).
-// Risk: Users don't know how likely they are to get in — reduces commitment.
-
-// TODO [LOW][Analytics]:
-// No tracking of join request events. Cannot analyze join rate, conversion,
-// or which games attract the most interest.
-// Fix: Log JOIN_REQUESTED event with userId, gameId, status to analytics.
-// Risk: No data for marketplace optimization.
-
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
+import { z } from 'zod'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+
+const JoinSchema = z.object({
+  message: z.string().max(500, 'ההודעה ארוכה מדי').optional().nullable(),
+})
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return NextResponse.json({ error: 'נא להתחבר' }, { status: 401 })
 
-  // TODO [HIGH][Trust & Safety]: Check if user is banned here before proceeding.
-  // const user = await prisma.user.findUnique({ where: { id: session.user.id }, select: { isBanned: true } })
-  // if (user?.isBanned) return NextResponse.json({ error: 'החשבון הושעה' }, { status: 403 })
-
-  const game = await prisma.game.findUnique({ where: { id: params.id } })
-  if (!game) return NextResponse.json({ error: 'משחק לא נמצא' }, { status: 404 })
-  if (game.status === 'CANCELLED') return NextResponse.json({ error: 'המשחק בוטל' }, { status: 400 })
-
-  // TODO [MEDIUM][UX]: Also block joining past games (dateTime < now).
-  // if (game.dateTime < new Date()) return NextResponse.json({ error: 'המשחק כבר התקיים' }, { status: 400 })
-
-  if (game.hostId === session.user.id) {
-    return NextResponse.json({ error: 'אינך יכול לבקש להצטרף למשחק שלך' }, { status: 400 })
+  let body: unknown
+  try {
+    body = await req.json()
+  } catch {
+    body = {}
   }
 
-  const existing = await prisma.gameRequest.findUnique({
-    where: { gameId_userId: { gameId: params.id, userId: session.user.id } },
+  const parsed = JoinSchema.safeParse(body)
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: 'נתונים לא תקינים', details: parsed.error.flatten().fieldErrors },
+      { status: 422 }
+    )
+  }
+
+  const { message } = parsed.data
+
+  // Check ban status before any DB writes
+  const requestingUser = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { isBanned: true },
   })
-  if (existing) return NextResponse.json({ error: 'כבר שלחת בקשה למשחק זה' }, { status: 409 })
+  if (requestingUser?.isBanned) {
+    return NextResponse.json({ error: 'החשבון הושעה' }, { status: 403 })
+  }
 
-  const { message } = await req.json().catch(() => ({}))
+  // Atomic capacity check + request creation in a single transaction.
+  // This prevents two simultaneous requests from both reading "not full"
+  // and both getting PENDING status (overbooking race condition).
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const game = await tx.game.findUnique({ where: { id: params.id } })
+      if (!game) return { error: 'משחק לא נמצא', status: 404 }
+      if (game.status === 'CANCELLED') return { error: 'המשחק בוטל', status: 400 }
+      if (game.dateTime < new Date()) return { error: 'המשחק כבר התקיים', status: 400 }
+      if (game.hostId === session.user.id) {
+        return { error: 'אינך יכול לבקש להצטרף למשחק שלך', status: 400 }
+      }
 
-  // TODO [MEDIUM][Backend]: Validate message length and content here.
-  // if (message && message.length > 500) return NextResponse.json({ error: 'הודעה ארוכה מדי' }, { status: 400 })
+      const existing = await tx.gameRequest.findUnique({
+        where: { gameId_userId: { gameId: params.id, userId: session.user.id } },
+      })
+      if (existing) return { error: 'כבר שלחת בקשה למשחק זה', status: 409 }
 
-  // TODO [CRITICAL][Backend]: This capacity check + create is a RACE CONDITION.
-  // Wrap in prisma.$transaction() with SELECT FOR UPDATE to prevent overbooking.
-  const isFull = game.status === 'FULL' || game.currentPlayers >= game.maxPlayers
-  const status = isFull ? 'WAITLIST' : 'PENDING'
+      const isFull = game.status === 'FULL' || game.currentPlayers >= game.maxPlayers
+      const requestStatus = isFull ? 'WAITLIST' : 'PENDING'
 
-  const request = await prisma.gameRequest.create({
-    data: {
-      gameId: params.id,
-      userId: session.user.id,
-      message: message ?? null,
-      status,
-    },
-  })
+      const request = await tx.gameRequest.create({
+        data: {
+          gameId: params.id,
+          userId: session.user.id,
+          message: message ?? null,
+          status: requestStatus,
+        },
+      })
 
-  // TODO [MEDIUM][UX]: Return waitlist position if status === 'WAITLIST'.
-  // const waitlistPosition = await prisma.gameRequest.count({
-  //   where: { gameId: params.id, status: 'WAITLIST', createdAt: { lt: request.createdAt } }
-  // })
+      return { request, requestStatus }
+    })
 
-  return NextResponse.json(request, { status: 201 })
+    if ('error' in result) {
+      return NextResponse.json({ error: result.error }, { status: result.status })
+    }
+
+    return NextResponse.json(result.request, { status: 201 })
+  } catch (err) {
+    console.error('Join request error:', err)
+    return NextResponse.json({ error: 'שגיאה בשליחת הבקשה' }, { status: 500 })
+  }
 }

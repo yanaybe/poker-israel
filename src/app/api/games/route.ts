@@ -1,97 +1,95 @@
-// TODO [HIGH][Performance]:
-// GET /api/games returns ALL games in the database with no pagination.
-// The query includes full host data + ALL host ratings for each game.
-// At 1,000 games with 50 ratings each, this fetches 50,000 rating rows per request.
-// Fix: Add cursor-based pagination (?cursor=lastId&limit=20).
-// Add a pre-computed avgRating column on User to avoid joining all ratings.
-// Risk: This endpoint will time out / OOM as the game count grows.
-
-// TODO [HIGH][Performance]:
-// hostRatingsReceived is included in every game's host data to compute avgRating.
-// This is an N+1 pattern at the dataset level — fetching ratings for every host.
-// Fix: Store a denormalized avgRating and ratingCount on User (updated via trigger
-// or background job when new ratings are submitted).
-// Risk: O(total_ratings) data transferred on every games list load.
-
-// TODO [HIGH][Backend]:
-// Client-side filtering: frontend receives all games and filters by city/gameType/stakes/status.
-// This means ALL game data is sent over the network even when 90% is filtered out.
-// Fix: Move all filtering to the DB query (already partially done with WHERE clause,
-// but stakes and the full city filtering are client-side in GameFilters component).
-// Risk: Network bandwidth waste; will be slow on mobile data connections.
-
-// TODO [HIGH][Backend]:
-// No authentication required for GET /api/games — this is correct for discovery,
-// but there's no rate limiting. A bot can scrape all game data including host names,
-// cities, and schedules.
-// Fix: Add rate limiting (100 req/min per IP) and consider omitting sensitive fields
-// (exact location) from unauthenticated responses.
-// Risk: Data scraping, competitive intelligence, host targeting.
-
-// TODO [MEDIUM][Backend]:
-// No validation on POST body fields. `parseInt(buyIn)` where buyIn is undefined
-// returns NaN. `parseInt("999999999999")` stores an absurd value. No max/min checks.
-// Fix: Add Zod schema for game creation with proper bounds:
-// buyIn: z.number().int().min(0).max(100000)
-// maxPlayers: z.number().int().min(2).max(20)
-// dateTime: z.string().datetime().refine(d => new Date(d) > new Date(), 'Must be future')
-// Risk: Invalid data types and out-of-bounds values stored in DB.
-
-// TODO [MEDIUM][Performance]:
-// No caching layer. Every page load by every user hits the database.
-// Fix: Cache the games list in Redis with a 60-second TTL. Invalidate on game
-// creation, update, or deletion. Use Next.js unstable_cache or a Redis client.
-// Risk: Database load scales linearly with active users — bottleneck at ~100 concurrent.
-
-// TODO [MEDIUM][UX]:
-// No "upcoming only" filter. By default, past games are included in results unless
-// the frontend explicitly filters. Users see games that already happened.
-// Fix: Add default filter: dateTime >= now() unless includePast=true is specified.
-// Risk: Bad UX — game list cluttered with past/expired games.
-
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
+import { z } from 'zod'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { isPremiumHost, getMonthlyPostCount, FREE_GAME_LIMIT } from '@/lib/premium'
+import { ISRAELI_CITIES, STAKES_OPTIONS } from '@/types/index'
+
+const CreateGameSchema = z.object({
+  title: z.string().min(3, 'כותרת קצרה מדי').max(100, 'כותרת ארוכה מדי').trim(),
+  neighborhood: z.string().max(100).trim().optional().nullable(),
+  location: z.string().min(2, 'נא להזין כתובת').max(300, 'כתובת ארוכה מדי').trim(),
+  city: z.enum(ISRAELI_CITIES as [string, ...string[]], { errorMap: () => ({ message: 'עיר לא חוקית' }) }),
+  dateTime: z.string().datetime({ message: 'תאריך לא תקין' }).refine(
+    (d) => new Date(d) > new Date(),
+    { message: 'תאריך המשחק חייב להיות בעתיד' }
+  ),
+  buyIn: z.number({ invalid_type_error: 'ביי-אין לא תקין' }).int().min(0).max(100000),
+  gameType: z.enum(['CASH', 'TOURNAMENT', 'SIT_AND_GO'], { errorMap: () => ({ message: 'סוג משחק לא תקין' }) }),
+  stakes: z.enum(STAKES_OPTIONS as [string, ...string[]], { errorMap: () => ({ message: 'סטייקס לא תקין' }) }),
+  houseFeeType: z.enum(['FLAT', 'PERCENTAGE', 'NONE']).optional().nullable(),
+  houseFee: z.number().int().min(0).max(10000).optional().nullable(),
+  houseFeePct: z.number().min(0).max(50).optional().nullable(),
+  houseFeeMax: z.number().int().min(0).max(10000).optional().nullable(),
+  maxPlayers: z.number({ invalid_type_error: 'מספר שחקנים לא תקין' }).int().min(2).max(20),
+  notes: z.string().max(2000, 'הערות ארוכות מדי').optional().nullable(),
+  stackMin: z.number().int().min(0).max(1000000).optional().nullable(),
+  stackMax: z.number().int().min(0).max(1000000).optional().nullable(),
+  rebuyType: z.enum(['UNLIMITED', 'CAPPED', 'NONE']).optional().nullable(),
+  rebuyCap: z.number().int().min(1).max(100).optional().nullable(),
+  gamePace: z.enum(['FAST', 'NORMAL', 'SLOW']).optional().nullable(),
+  vibeTags: z.string().max(500).optional().nullable(),
+  expectedDuration: z.number().min(0.5).max(24).optional().nullable(),
+  hasFood: z.boolean().default(false),
+  hasDrinks: z.boolean().default(false),
+})
+
+type HostRatingDim = {
+  punctuality: number | null
+  locationAccuracy: number | null
+  fairDealing: number | null
+  safety: number | null
+}
+
+const hostSelect = {
+  id: true, name: true, image: true, city: true, skillLevel: true,
+  _count: { select: { strikes: true, gamesHosted: true } },
+  hostRatingsReceived: {
+    select: { punctuality: true, locationAccuracy: true, fairDealing: true, safety: true },
+    where: { declined: false },
+  },
+  subscription: { select: { status: true, currentPeriodEnd: true } },
+}
+
+function addAvgRating<T extends {
+  host: {
+    hostRatingsReceived: HostRatingDim[]
+    subscription: { status: string; currentPeriodEnd: Date } | null
+  }
+  boost?: { boostedUntil: Date } | null
+}>(games: T[], now: Date) {
+  const withMeta = games.map(({ host: { hostRatingsReceived, subscription, ...host }, boost, ...g }) => {
+    const vals = hostRatingsReceived
+      .flatMap((r) => [r.punctuality, r.locationAccuracy, r.fairDealing, r.safety])
+      .filter((v): v is number => v !== null)
+    const avgRating = vals.length > 0
+      ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10
+      : null
+    const isPremium = !!subscription && subscription.status === 'active' && subscription.currentPeriodEnd > now
+    const isBoosted = !!boost && boost.boostedUntil > now
+    return {
+      ...g,
+      boost: isBoosted ? { boostedUntil: boost!.boostedUntil.toISOString() } : null,
+      host: { ...host, avgRating, isPremium },
+    }
+  })
+  return withMeta.sort((a, b) => {
+    if (a.boost && !b.boost) return -1
+    if (!a.boost && b.boost) return 1
+    return 0
+  })
+}
 
 export async function GET(req: Request) {
-  // TODO [HIGH][Backend]: Add pagination params parsing here.
-  // const limit = parseInt(searchParams.get('limit') ?? '20')
-  // const cursor = searchParams.get('cursor') ?? undefined
   const { searchParams } = new URL(req.url)
   const hostId = searchParams.get('hostId')
   const city = searchParams.get('city')
   const gameType = searchParams.get('gameType')
   const status = searchParams.get('status')
   const joinedUserId = searchParams.get('joinedUserId')
-
-  type HostRatingDim = { punctuality: number | null; locationAccuracy: number | null; fairDealing: number | null; safety: number | null }
-  const hostSelect = {
-    id: true, name: true, image: true, city: true, skillLevel: true,
-    _count: { select: { strikes: true, gamesHosted: true } },
-    hostRatingsReceived: { select: { punctuality: true, locationAccuracy: true, fairDealing: true, safety: true }, where: { declined: false } },
-    subscription: { select: { status: true, currentPeriodEnd: true } },
-  }
-
   const now = new Date()
-  const addAvgRating = <T extends { host: { hostRatingsReceived: HostRatingDim[]; subscription: { status: string; currentPeriodEnd: Date } | null }; boost?: { boostedUntil: Date } | null }>(games: T[]) => {
-    const withMeta = games.map(({ host: { hostRatingsReceived, subscription, ...host }, boost, ...g }) => {
-      const vals = hostRatingsReceived.flatMap((r) => [r.punctuality, r.locationAccuracy, r.fairDealing, r.safety]).filter((v): v is number => v !== null)
-      const avgRating = vals.length > 0 ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10 : null
-      const isPremium = !!subscription && subscription.status === 'active' && subscription.currentPeriodEnd > now
-      const isBoosted = !!boost && boost.boostedUntil > now
-      return { ...g, boost: isBoosted ? { boostedUntil: boost!.boostedUntil.toISOString() } : null, host: { ...host, avgRating, isPremium } }
-    })
-    // Boosted games first, then by dateTime
-    return withMeta.sort((a, b) => {
-      if (a.boost && !b.boost) return -1
-      if (!a.boost && b.boost) return 1
-      return 0
-    })
-  }
 
-  // Return games where a specific user has an approved request
   if (joinedUserId) {
     const requestStatus = searchParams.get('requestStatus') ?? 'APPROVED'
     const requests = await prisma.gameRequest.findMany({
@@ -107,14 +105,14 @@ export async function GET(req: Request) {
       },
       orderBy: { createdAt: 'asc' },
     })
-    return NextResponse.json(addAvgRating(requests.map((r) => r.game)))
+    return NextResponse.json(addAvgRating(requests.map((r) => r.game), now))
   }
 
   const where: Record<string, unknown> = {}
   if (hostId) where.hostId = hostId
-  if (city) where.city = city
-  if (gameType) where.gameType = gameType
-  if (status) where.status = status
+  if (city && (ISRAELI_CITIES as string[]).includes(city)) where.city = city
+  if (gameType && ['CASH', 'TOURNAMENT', 'SIT_AND_GO'].includes(gameType)) where.gameType = gameType
+  if (status && ['OPEN', 'FULL', 'CLOSED', 'CANCELLED'].includes(status)) where.status = status
 
   const games = await prisma.game.findMany({
     where,
@@ -126,7 +124,7 @@ export async function GET(req: Request) {
     orderBy: { dateTime: 'asc' },
   })
 
-  return NextResponse.json(addAvgRating(games))
+  return NextResponse.json(addAvgRating(games, now))
 }
 
 export async function POST(req: Request) {
@@ -135,11 +133,36 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'נא להתחבר' }, { status: 401 })
   }
 
+  let body: unknown
+  try {
+    body = await req.json()
+  } catch {
+    return NextResponse.json({ error: 'בקשה לא תקינה' }, { status: 400 })
+  }
+
+  const parsed = CreateGameSchema.safeParse(body)
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: 'נתונים לא תקינים', details: parsed.error.flatten().fieldErrors },
+      { status: 422 }
+    )
+  }
+
+  const data = parsed.data
+
   const [host, premium, monthlyCount] = await Promise.all([
-    prisma.user.findUnique({ where: { id: session.user.id }, select: { canHostUntil: true } }),
+    prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { canHostUntil: true, isBanned: true },
+    }),
     isPremiumHost(session.user.id),
     getMonthlyPostCount(session.user.id),
   ])
+
+  if (host?.isBanned) {
+    return NextResponse.json({ error: 'החשבון הושעה' }, { status: 403 })
+  }
+
   if (host?.canHostUntil && host.canHostUntil > new Date()) {
     const until = host.canHostUntil.toLocaleDateString('he-IL')
     return NextResponse.json(
@@ -147,58 +170,42 @@ export async function POST(req: Request) {
       { status: 403 }
     )
   }
+
   if (!premium && monthlyCount >= FREE_GAME_LIMIT) {
-    return NextResponse.json({ error: 'הגעת לגבול 3 משחקים בחודש', code: 'UPGRADE_REQUIRED' }, { status: 403 })
+    return NextResponse.json(
+      { error: 'הגעת לגבול 3 משחקים בחודש', code: 'UPGRADE_REQUIRED' },
+      { status: 403 }
+    )
   }
 
   try {
-    const body = await req.json()
-    const {
-      title, neighborhood, location, city, dateTime, buyIn, gameType, stakes,
-      houseFeeType, houseFee, houseFeePct, houseFeeMax,
-      maxPlayers, currentPlayers, notes,
-      stackMin, stackMax, rebuyType, rebuyCap, gamePace, vibeTags, expectedDuration,
-      hasFood, hasDrinks,
-    } = body
-
-    if (!title || !location || !city || !dateTime || !gameType || !stakes || !maxPlayers) {
-      return NextResponse.json({ error: 'חסרים שדות חובה' }, { status: 400 })
-    }
-
-    // TODO [MEDIUM][Security]: buyIn: parseInt(buyIn) — if buyIn is undefined or
-    // a non-numeric string, this produces NaN which Prisma may accept or reject
-    // inconsistently. Always validate numeric fields before parseInt.
-    // TODO [MEDIUM][Security]: No bounds checking. buyIn could be -1 or 999999999.
-    // Add: if (parsedBuyIn < 0 || parsedBuyIn > 100000) return 400
-    // TODO [MEDIUM][Security]: dateTime is not validated as a future date.
-    // A game can be created with a past dateTime, polluting the games list.
     const game = await prisma.game.create({
       data: {
         hostId: session.user.id,
-        title,
-        neighborhood: neighborhood ?? null,
-        location,
-        city,
-        dateTime: new Date(dateTime),
-        buyIn: parseInt(buyIn),
-        gameType,
-        stakes,
-        houseFeeType: houseFeeType ?? null,
-        houseFee: houseFee ?? null,
-        houseFeePct: houseFeePct ?? null,
-        houseFeeMax: houseFeeMax ?? null,
-        maxPlayers: parseInt(maxPlayers),
-        currentPlayers: currentPlayers ?? 1,
-        notes: notes ?? null,
-        stackMin: stackMin ? parseInt(stackMin) : null,
-        stackMax: stackMax ? parseInt(stackMax) : null,
-        rebuyType: rebuyType ?? null,
-        rebuyCap: rebuyType === 'CAPPED' && rebuyCap ? parseInt(rebuyCap) : null,
-        gamePace: gamePace ?? null,
-        vibeTags: vibeTags ?? null,
-        expectedDuration: expectedDuration ? parseFloat(expectedDuration) : null,
-        hasFood: hasFood ?? false,
-        hasDrinks: hasDrinks ?? false,
+        title: data.title,
+        neighborhood: data.neighborhood ?? null,
+        location: data.location,
+        city: data.city,
+        dateTime: new Date(data.dateTime),
+        buyIn: data.buyIn,
+        gameType: data.gameType,
+        stakes: data.stakes,
+        houseFeeType: data.houseFeeType ?? null,
+        houseFee: data.houseFee ?? null,
+        houseFeePct: data.houseFeePct ?? null,
+        houseFeeMax: data.houseFeeMax ?? null,
+        maxPlayers: data.maxPlayers,
+        currentPlayers: 1,
+        notes: data.notes ?? null,
+        stackMin: data.stackMin ?? null,
+        stackMax: data.stackMax ?? null,
+        rebuyType: data.rebuyType ?? null,
+        rebuyCap: data.rebuyType === 'CAPPED' ? (data.rebuyCap ?? null) : null,
+        gamePace: data.gamePace ?? null,
+        vibeTags: data.vibeTags ?? null,
+        expectedDuration: data.expectedDuration ?? null,
+        hasFood: data.hasFood,
+        hasDrinks: data.hasDrinks,
       },
       include: {
         host: { select: { id: true, name: true, image: true, city: true, skillLevel: true } },
@@ -206,8 +213,8 @@ export async function POST(req: Request) {
     })
 
     return NextResponse.json(game, { status: 201 })
-  } catch (error) {
-    console.error('Create game error:', error)
+  } catch (err) {
+    console.error('Create game error:', err)
     return NextResponse.json({ error: 'שגיאה ביצירת המשחק' }, { status: 500 })
   }
 }

@@ -1,61 +1,27 @@
-// TODO [HIGH][Security]:
-// This endpoint exposes user email addresses to anyone — no authentication required.
-// Email is personally identifiable information and should never be public.
-// Fix: Remove `email: true` from the select, or gate the endpoint behind auth
-// and only return email to the user themselves.
-// Risk: All user email addresses are publicly scrapeable via /api/users/[id].
-
-// TODO [HIGH][Security]:
-// canHostUntil (suspension date) is returned in the public API response.
-// This leaks the fact that a user is suspended and when the suspension ends.
-// Fix: Remove canHostUntil from public profile response. Only the user themselves
-// and admins should see suspension details.
-// Risk: Privacy violation; suspended users are publicly labelled.
-
-// TODO [HIGH][Performance]:
-// This endpoint makes 3 parallel DB queries + in-memory computation every time
-// a profile is viewed. For popular hosts, this runs constantly.
-// Fix: Denormalize avgRating, totalRatings, returnRate onto the User model.
-// Update these fields via background job when new ratings arrive.
-// Risk: Profile page is slow for hosts with many ratings.
-
-// TODO [HIGH][Trust & Safety]:
-// No authentication required. Anyone can view any user's full profile including
-// hosting history, rating breakdown, and city location.
-// Fix: Public profiles should only show public fields. Viewing more detail
-// (email, age, contact) should require authentication.
-// Risk: Data harvesting for targeting or doxxing purposes.
-
-// TODO [MEDIUM][Backend]:
-// pastGames includes ALL games ever hosted — no limit. A host with 500 past games
-// has all their game data + approved requests loaded to compute returnRate.
-// Fix: Only fetch last 12 months of games for returnRate calculation.
-// Or store returnRate as a denormalized field on User.
-// Risk: O(all_past_games) query on every profile view.
-
-// TODO [LOW][UX]:
-// No "private profile" setting. Some hosts may not want their rating history,
-// return rate, or strike count visible publicly.
-// Fix: Add User.profileVisibility enum: PUBLIC | PLAYERS_ONLY | PRIVATE
-
 import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
+export async function GET(req: Request, { params }: { params: { id: string } }) {
+  const session = await getServerSession(authOptions)
+  const viewerIsOwner = session?.user?.id === params.id
+  const viewerIsAdmin = session?.user?.isAdmin === true
+
   const user = await prisma.user.findUnique({
     where: { id: params.id },
     select: {
       id: true,
       name: true,
-      // TODO [HIGH][Security]: Remove email from public profile response.
-      email: true,
       age: true,
       city: true,
       skillLevel: true,
       image: true,
-      // TODO [HIGH][Security]: Remove canHostUntil from public response.
-      canHostUntil: true,
       createdAt: true,
+      // Email returned only to the user themselves or admins
+      ...(viewerIsOwner || viewerIsAdmin ? { email: true } : {}),
+      // Suspension details are admin-only
+      ...(viewerIsAdmin ? { canHostUntil: true, isBanned: true, banReason: true } : {}),
       _count: {
         select: {
           gamesHosted: true,
@@ -84,7 +50,10 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     }),
     prisma.game.findMany({
       where: { hostId: params.id, dateTime: { lt: new Date() } },
-      include: { requests: { where: { status: 'APPROVED' }, select: { userId: true } } },
+      select: {
+        id: true,
+        requests: { where: { status: 'APPROVED' }, select: { userId: true } },
+      },
     }),
   ])
 

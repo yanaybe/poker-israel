@@ -1,47 +1,21 @@
-// TODO [CRITICAL][Security]:
-// Seed users all use the hardcoded password "password123".
-// This password is also shown in the login page demo hint.
-// Fix: Use strong random passwords in seed, or use a PASSWORD environment variable.
-// NEVER run this seed against production — add a guard:
-// if (process.env.NODE_ENV === 'production') { throw new Error('Never seed production!') }
-// Risk: Demo credentials are public knowledge. Any account with password123 is trivially compromised.
-
-// TODO [HIGH][DevOps]:
-// No guard preventing seed from running against production database.
-// A developer who accidentally runs `npm run db:seed` against production will
-// create test users with known credentials in the production DB.
-// Fix: Add NODE_ENV check: if (process.env.NODE_ENV !== 'development') process.exit(1)
-// Risk: Test accounts in production with trivially guessable passwords.
-
-// TODO [MEDIUM][Backend]:
-// Seed creates games with hardcoded content including real-sounding addresses
-// ("רחוב דיזנגוף"). These addresses are stored in the location field.
-// Fix: Use clearly fictional addresses or placeholder location text in seed data.
-// Risk: Seed addresses could be mistaken for real game locations in test environments.
-
-// TODO [LOW][DevOps]:
-// Seed script uses a separate PrismaClient() instance instead of the shared
-// singleton from src/lib/db.ts. This is fine for seeding but creates a different
-// connection than the app uses.
-// Fix: Document that seed.ts is standalone and uses its own connection.
-
 import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 
 const prisma = new PrismaClient()
 
 async function main() {
-  // TODO [CRITICAL][Security]: Add production guard:
-  // if (process.env.NODE_ENV === 'production') {
-  //   throw new Error('NEVER run seed against production database!')
-  // }
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error('NEVER run seed against production database!')
+  }
+
+  const seedPassword = process.env.SEED_PASSWORD
+  if (!seedPassword) {
+    throw new Error('SEED_PASSWORD environment variable is required. Set it in your .env file.')
+  }
 
   console.log('🃏 Seeding poker-israel database...')
 
-  // TODO [CRITICAL][Security]: Change password123 to a strong random password
-  // or read from environment variable: process.env.SEED_PASSWORD
-  // Create users
-  const password = await bcrypt.hash('password123', 10)
+  const password = await bcrypt.hash(seedPassword, 12)
 
   const david = await prisma.user.upsert({
     where: { email: 'david@example.com' },
@@ -113,7 +87,7 @@ async function main() {
     {
       hostId: david.id,
       title: 'קאש גיים אחלה ביתי',
-      location: 'הבית שלי, רחוב דיזנגוף',
+      location: 'כתובת לדוגמה, תל אביב',
       city: 'תל אביב',
       dateTime: tomorrow,
       buyIn: 500,
@@ -128,7 +102,7 @@ async function main() {
     {
       hostId: maya.id,
       title: 'טורניר שישי בלילה - ירושלים',
-      location: 'קלאב האחים, רחוב יפו 45',
+      location: 'כתובת לדוגמה, ירושלים',
       city: 'ירושלים',
       dateTime: nextFriday,
       buyIn: 200,
@@ -143,7 +117,7 @@ async function main() {
     {
       hostId: avi.id,
       title: 'קאש גיים חיפה 1/2',
-      location: 'מועדון הקלפים, רחוב הרצל',
+      location: 'כתובת לדוגמה, חיפה',
       city: 'חיפה',
       dateTime: nextWeek,
       buyIn: 300,
@@ -158,7 +132,7 @@ async function main() {
     {
       hostId: david.id,
       title: 'סיט אנד גו שבועי',
-      location: 'מועדון פוקר TLV',
+      location: 'כתובת לדוגמה, תל אביב',
       city: 'תל אביב',
       dateTime: nextWeek,
       buyIn: 150,
@@ -173,7 +147,7 @@ async function main() {
     {
       hostId: noa.id,
       title: 'קאש למתחילים - רמת גן',
-      location: 'בית פרטי, רמת גן',
+      location: 'כתובת לדוגמה, רמת גן',
       city: 'רמת גן',
       dateTime: nextFriday,
       buyIn: 100,
@@ -262,13 +236,6 @@ async function main() {
   }
 
   console.log('✅ Seed completed!')
-  console.log(`
-Test accounts (all use password: password123):
-  - david@example.com (פרו - תל אביב)
-  - maya@example.com (בינוני - ירושלים)
-  - avi@example.com (בינוני - חיפה)
-  - noa@example.com (מתחיל - רמת גן)
-  `)
 }
 
 main()

@@ -4,23 +4,13 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    // TODO [CRITICAL][DevOps]:
-    // `prisma db push` in the build script is DANGEROUS in production.
-    // `prisma db push` is a schema sync tool that CAN DROP COLUMNS/TABLES with data.
-    // It is NOT intended for production deployments.
-    // Fix: Replace with: "build": "prisma generate && prisma migrate deploy && next build"
-    // `prisma migrate deploy` applies versioned, reversible migrations safely.
-    // This requires creating a proper migration history first with `prisma migrate dev`.
-    // Risk: A production deploy can irreversibly destroy data without warning.
-    "build": "prisma generate && prisma db push && next build",
+    "build": "prisma generate && prisma migrate deploy && next build",
     "start": "next start",
     "lint": "next lint",
-    // TODO [HIGH][DevOps]: Add these missing scripts:
-    // "test": "jest --coverage"          -- No tests exist at all
-    // "test:e2e": "playwright test"      -- No E2E tests
-    // "migrate:dev": "prisma migrate dev"  -- For development migrations
-    // "migrate:prod": "prisma migrate deploy"  -- Safe production migrations
-    // "type-check": "tsc --noEmit"       -- Type checking without build
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "migrate:dev": "prisma migrate dev",
+    "migrate:prod": "prisma migrate deploy",
     "db:push": "prisma db push",
     "db:seed": "npx tsx prisma/seed.ts",
     "db:studio": "prisma studio",

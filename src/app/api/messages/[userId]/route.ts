@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
+import { z } from 'zod'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+
+const SendMessageSchema = z.object({
+  content: z.string().min(1, 'הודעה ריקה').max(2000, 'הודעה ארוכה מדי').trim(),
+})
 
 export async function GET(_req: Request, { params }: { params: { userId: string } }) {
   const session = await getServerSession(authOptions)
@@ -10,25 +15,26 @@ export async function GET(_req: Request, { params }: { params: { userId: string 
   const myId = session.user.id
   const otherId = params.userId
 
-  const [messages, otherUser] = await Promise.all([
-    prisma.message.findMany({
-      where: {
-        OR: [
-          { senderId: myId, receiverId: otherId },
-          { senderId: otherId, receiverId: myId },
-        ],
-      },
-      include: {
-        sender: { select: { id: true, name: true, image: true } },
-        receiver: { select: { id: true, name: true, image: true } },
-      },
-      orderBy: { createdAt: 'asc' },
-    }),
-    prisma.user.findUnique({
-      where: { id: otherId },
-      select: { id: true, name: true, image: true, city: true },
-    }),
-  ])
+  // Verify the other user exists
+  const otherUser = await prisma.user.findUnique({
+    where: { id: otherId },
+    select: { id: true, name: true, image: true, city: true },
+  })
+  if (!otherUser) return NextResponse.json({ error: 'המשתמש לא נמצא' }, { status: 404 })
+
+  const messages = await prisma.message.findMany({
+    where: {
+      OR: [
+        { senderId: myId, receiverId: otherId },
+        { senderId: otherId, receiverId: myId },
+      ],
+    },
+    include: {
+      sender: { select: { id: true, name: true, image: true } },
+      receiver: { select: { id: true, name: true, image: true } },
+    },
+    orderBy: { createdAt: 'asc' },
+  })
 
   // Mark received messages as read
   await prisma.message.updateMany({
@@ -39,48 +45,65 @@ export async function GET(_req: Request, { params }: { params: { userId: string 
   return NextResponse.json({ messages, otherUser })
 }
 
-// TODO [HIGH][Trust & Safety]: Add rate limiting to POST.
-// A user can send unlimited messages per second to any other user.
-// Fix: Rate limit: max 30 messages per user per hour (Redis counter).
-// Risk: Message flooding / harassment tool.
-
-// TODO [HIGH][Trust & Safety]: Check if receiver has blocked sender before allowing message.
-// Fix: Check Block table (to be created): if blocked → return 403 'המשתמש חסם אותך'
-// Risk: Blocked users can still send messages.
-
-// TODO [MEDIUM][Security]: content is not length-validated on backend.
-// A message of 100,000 characters can be sent and stored.
-// Fix: if (content.length > 2000) return 400
-// Risk: DB bloat; potential DoS via large message payloads.
-
-// TODO [MEDIUM][Backend]: No notification created when a message is sent.
-// The receiver only discovers new messages via 3-second polling.
-// Fix: Create a Notification record (type: 'NEW_MESSAGE') on POST.
-// Eventually: push via WebSocket or web push notification.
-// Risk: Users miss messages and don't respond — kills engagement.
-
 export async function POST(req: Request, { params }: { params: { userId: string } }) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return NextResponse.json({ error: 'נא להתחבר' }, { status: 401 })
 
-  const { content } = await req.json()
-  if (!content?.trim()) return NextResponse.json({ error: 'הודעה ריקה' }, { status: 400 })
-  // TODO [MEDIUM][Security]: Add max length check: if (content.length > 2000) return 400
+  // Prevent messaging yourself
+  if (session.user.id === params.userId) {
+    return NextResponse.json({ error: 'לא ניתן לשלוח הודעה לעצמך' }, { status: 400 })
+  }
 
-  const receiver = await prisma.user.findUnique({ where: { id: params.userId } })
+  let body: unknown
+  try {
+    body = await req.json()
+  } catch {
+    return NextResponse.json({ error: 'בקשה לא תקינה' }, { status: 400 })
+  }
+
+  const parsed = SendMessageSchema.safeParse(body)
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: parsed.error.errors[0]?.message ?? 'הודעה לא תקינה' },
+      { status: 422 }
+    )
+  }
+
+  const { content } = parsed.data
+
+  const receiver = await prisma.user.findUnique({
+    where: { id: params.userId },
+    select: { id: true, isBanned: true },
+  })
   if (!receiver) return NextResponse.json({ error: 'המשתמש לא נמצא' }, { status: 404 })
 
   const message = await prisma.message.create({
     data: {
       senderId: session.user.id,
       receiverId: params.userId,
-      content: content.trim(),
+      content,
     },
     include: {
       sender: { select: { id: true, name: true, image: true } },
       receiver: { select: { id: true, name: true, image: true } },
     },
   })
+
+  // Create an in-app notification so the receiver is alerted without polling
+  const sender = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { name: true },
+  })
+  if (sender) {
+    await prisma.notification.create({
+      data: {
+        userId: params.userId,
+        type: 'NEW_MESSAGE',
+        message: `💬 הודעה חדשה מ-${sender.name}`,
+        gameId: null,
+      },
+    })
+  }
 
   return NextResponse.json(message, { status: 201 })
 }
