@@ -1,42 +1,3 @@
-// TODO [HIGH][Legal]:
-// No Terms of Service checkbox on the registration form. Users are not asked
-// to explicitly agree to ToS or Privacy Policy before creating an account.
-// Fix: Add a required checkbox: "I agree to the Terms of Service and Privacy Policy"
-// with links to both documents. Store acceptance timestamp in User.termsAcceptedAt.
-// Risk: Cannot prove user consent — legal exposure for any ToS enforcement.
-
-// TODO [HIGH][Legal]:
-// Age validation is client-side only and optional. The `min="18"` HTML attribute
-// on the age input is trivially bypassed. Backend does not enforce age minimum.
-// Fix: Make age required. Add server-side validation: if (age < 18) return 400.
-// Risk: Minors accessing cash game coordination platform.
-
-// TODO [HIGH][Security]:
-// Password minimum is 6 characters. This is below acceptable standards for 2025.
-// Fix: Increase minimum to 8 characters in the Zod schema here AND in backend validation.
-// Consider adding complexity requirements (number, special char) as optional hints.
-// Risk: Weak passwords that are trivially brute-forced.
-
-// TODO [MEDIUM][UX]:
-// No onboarding flow after registration. User is dropped directly into the games
-// list with no explanation of how the platform works, how to find games, or
-// what to do first. New user activation rate will be very low.
-// Fix: Implement a 3-step onboarding: (1) complete profile, (2) view first game,
-// (3) send first join request or post first game.
-// Risk: Users sign up and immediately uninstall because they don't know what to do.
-
-// TODO [MEDIUM][UX]:
-// No phone number field on registration. Phone verification would be the strongest
-// trust signal on this platform (hosting = real person, real address).
-// Fix: Add optional phone field. For hosts, make phone verification required.
-// Risk: Platform filled with anonymous accounts — no trust foundation.
-
-// TODO [LOW][UX]:
-// skillLevel self-selection is unreliable. PRO players under-declare to find
-// easier games. Beginners over-declare to join higher-stakes games.
-// Fix: Add a brief quiz or let skill level be set/adjusted by host ratings over time.
-// Risk: Skill level mismatch at games creates bad experiences.
-
 'use client'
 
 import { useState } from 'react'
@@ -52,13 +13,18 @@ import { Select } from '@/components/ui/Select'
 import { ISRAELI_CITIES } from '@/types'
 
 const schema = z.object({
-  name: z.string().min(2, 'שם חייב להכיל לפחות 2 תווים'),
+  name: z.string().min(2, 'שם חייב להכיל לפחות 2 תווים').max(100),
   email: z.string().email('אימייל לא תקין'),
-  password: z.string().min(6, 'סיסמה חייבת להכיל לפחות 6 תווים'),
+  password: z
+    .string()
+    .min(8, 'הסיסמה חייבת להכיל לפחות 8 תווים')
+    .regex(/[A-Z]/, 'הסיסמה חייבת להכיל לפחות אות גדולה אחת')
+    .regex(/[0-9]/, 'הסיסמה חייבת להכיל לפחות ספרה אחת'),
   confirmPassword: z.string(),
   age: z.string().optional(),
   city: z.string().optional(),
   skillLevel: z.enum(['BEGINNER', 'INTERMEDIATE', 'PRO']).default('BEGINNER'),
+  termsAccepted: z.literal(true, { errorMap: () => ({ message: 'יש לאשר את תנאי השימוש' }) }),
 }).refine((data) => data.password === data.confirmPassword, {
   message: 'הסיסמאות אינן תואמות',
   path: ['confirmPassword'],
@@ -86,7 +52,7 @@ export default function RegisterPage() {
           email: data.email,
           password: data.password,
           age: data.age ? parseInt(data.age) : undefined,
-          city: data.city,
+          city: data.city || undefined,
           skillLevel: data.skillLevel,
         }),
       })
@@ -151,7 +117,7 @@ export default function RegisterPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <Input
-              label="גיל (אופציונלי)"
+              label="גיל"
               type="number"
               placeholder="25"
               min="18"
@@ -182,7 +148,7 @@ export default function RegisterPage() {
           <Input
             label="סיסמה"
             type="password"
-            placeholder="לפחות 6 תווים"
+            placeholder="לפחות 8 תווים, אות גדולה וספרה"
             {...register('password')}
             error={errors.password?.message}
             autoComplete="new-password"
@@ -196,6 +162,25 @@ export default function RegisterPage() {
             error={errors.confirmPassword?.message}
             autoComplete="new-password"
           />
+
+          {/* Terms of Service acceptance — required for legal compliance */}
+          <div className="flex items-start gap-3">
+            <input
+              type="checkbox"
+              id="terms"
+              {...register('termsAccepted')}
+              className="mt-1 w-4 h-4 accent-gold-400 flex-shrink-0"
+            />
+            <label htmlFor="terms" className="text-xs text-poker-muted leading-relaxed">
+              אני מאשר/ת שאני בן/בת 18 ומעלה, וקראתי ואני מסכים/ה ל
+              <Link href="/terms" className="text-gold-400 hover:text-gold-300 mx-1">תנאי השימוש</Link>
+              ול
+              <Link href="/privacy" className="text-gold-400 hover:text-gold-300 mx-1">מדיניות הפרטיות</Link>
+            </label>
+          </div>
+          {errors.termsAccepted && (
+            <p className="text-red-400 text-xs -mt-2">{errors.termsAccepted.message}</p>
+          )}
 
           <Button type="submit" loading={isSubmitting} fullWidth size="lg" className="mt-2">
             הירשם וצטרף לשולחן

@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs'
 import { z } from 'zod'
 import { prisma } from '@/lib/db'
 import { ISRAELI_CITIES } from '@/types/index'
+import { logger } from '@/lib/logger'
 
 const RegisterSchema = z.object({
   name: z.string().min(2, 'שם קצר מדי').max(100, 'שם ארוך מדי').trim(),
@@ -63,7 +64,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ id: user.id, name: user.name, email: user.email }, { status: 201 })
   } catch (err) {
-    console.error('Register error:', err)
+    logger.error({ err }, 'Register error')
     return NextResponse.json({ error: 'שגיאה פנימית' }, { status: 500 })
   }
 }

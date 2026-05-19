@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { z } from 'zod'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { logger } from '@/lib/logger'
 
 const JoinSchema = z.object({
   message: z.string().max(500, 'ההודעה ארוכה מדי').optional().nullable(),
@@ -77,7 +78,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
     return NextResponse.json(result.request, { status: 201 })
   } catch (err) {
-    console.error('Join request error:', err)
+    logger.error({ err }, 'Join request error')
     return NextResponse.json({ error: 'שגיאה בשליחת הבקשה' }, { status: 500 })
   }
 }

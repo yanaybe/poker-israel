@@ -46,25 +46,60 @@ function withRating<T extends {
   return { ...rest, avgRating, totalRatings: playerRatingsReceived.length }
 }
 
+const LFG_PAGE_LIMIT = 20
+const LFG_MAX_LIMIT = 50
+
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const city = searchParams.get('city')
+  const cursor = searchParams.get('cursor')
+  const limitParam = parseInt(searchParams.get('limit') ?? String(LFG_PAGE_LIMIT), 10)
+  const limit = Math.min(isNaN(limitParam) || limitParam < 1 ? LFG_PAGE_LIMIT : limitParam, LFG_MAX_LIMIT)
   const now = new Date()
 
-  // Validate city param if provided
   const cityFilter = city && (ISRAELI_CITIES as string[]).includes(city) ? city : undefined
+
+  let cursorData: { id: string; createdAt: string } | null = null
+  if (cursor) {
+    try {
+      cursorData = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'))
+    } catch {
+      return NextResponse.json({ error: 'cursor לא תקין' }, { status: 400 })
+    }
+  }
+
+  const cursorWhere = cursorData
+    ? {
+        OR: [
+          { createdAt: { lt: new Date(cursorData.createdAt) } },
+          { createdAt: { equals: new Date(cursorData.createdAt) }, id: { gt: cursorData.id } },
+        ],
+      }
+    : {}
 
   const posts = await prisma.lfgPost.findMany({
     where: {
       status: 'ACTIVE',
       expiresAt: { gt: now },
       ...(cityFilter ? { city: cityFilter } : {}),
+      ...cursorWhere,
     },
     include: { user: { select: userSelect } },
-    orderBy: { createdAt: 'desc' },
+    orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+    take: limit + 1,
   })
 
-  return NextResponse.json(posts.map(({ user, ...post }) => ({ ...post, user: withRating(user) })))
+  const hasMore = posts.length > limit
+  const page = posts.slice(0, limit)
+  const last = page[page.length - 1]
+  const nextCursor = hasMore && last
+    ? Buffer.from(JSON.stringify({ id: last.id, createdAt: last.createdAt.toISOString() }), 'utf8').toString('base64url')
+    : null
+
+  return NextResponse.json({
+    posts: page.map(({ user, ...post }) => ({ ...post, user: withRating(user) })),
+    nextCursor,
+  })
 }
 
 export async function POST(req: Request) {

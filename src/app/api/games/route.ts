@@ -5,6 +5,7 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { isPremiumHost, getMonthlyPostCount, FREE_GAME_LIMIT } from '@/lib/premium'
 import { ISRAELI_CITIES, STAKES_OPTIONS } from '@/types/index'
+import { logger } from '@/lib/logger'
 
 const CreateGameSchema = z.object({
   title: z.string().min(3, 'כותרת קצרה מדי').max(100, 'כותרת ארוכה מדי').trim(),
@@ -81,6 +82,9 @@ function addAvgRating<T extends {
   })
 }
 
+const PAGE_LIMIT = 20
+const MAX_LIMIT = 50
+
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const hostId = searchParams.get('hostId')
@@ -88,6 +92,9 @@ export async function GET(req: Request) {
   const gameType = searchParams.get('gameType')
   const status = searchParams.get('status')
   const joinedUserId = searchParams.get('joinedUserId')
+  const cursor = searchParams.get('cursor')
+  const limitParam = parseInt(searchParams.get('limit') ?? String(PAGE_LIMIT), 10)
+  const limit = Math.min(isNaN(limitParam) || limitParam < 1 ? PAGE_LIMIT : limitParam, MAX_LIMIT)
   const now = new Date()
 
   if (joinedUserId) {
@@ -105,26 +112,81 @@ export async function GET(req: Request) {
       },
       orderBy: { createdAt: 'asc' },
     })
-    return NextResponse.json(addAvgRating(requests.map((r) => r.game), now))
+    return NextResponse.json({ games: addAvgRating(requests.map((r) => r.game), now), nextCursor: null })
   }
 
-  const where: Record<string, unknown> = {}
-  if (hostId) where.hostId = hostId
-  if (city && (ISRAELI_CITIES as string[]).includes(city)) where.city = city
-  if (gameType && ['CASH', 'TOURNAMENT', 'SIT_AND_GO'].includes(gameType)) where.gameType = gameType
-  if (status && ['OPEN', 'FULL', 'CLOSED', 'CANCELLED'].includes(status)) where.status = status
+  const baseWhere: Record<string, unknown> = {}
+  if (hostId) baseWhere.hostId = hostId
+  if (city && (ISRAELI_CITIES as string[]).includes(city)) baseWhere.city = city
+  if (gameType && ['CASH', 'TOURNAMENT', 'SIT_AND_GO'].includes(gameType)) baseWhere.gameType = gameType
+  if (status && ['OPEN', 'FULL', 'CLOSED', 'CANCELLED'].includes(status)) baseWhere.status = status
 
-  const games = await prisma.game.findMany({
-    where,
-    include: {
-      host: { select: hostSelect },
-      boost: { select: { boostedUntil: true } },
-      _count: { select: { requests: true } },
-    },
-    orderBy: { dateTime: 'asc' },
+  const gameInclude = {
+    host: { select: hostSelect },
+    boost: { select: { boostedUntil: true } },
+    _count: { select: { requests: true } },
+  }
+
+  // Decode cursor: base64-encoded JSON { id, dateTime }
+  let cursorData: { id: string; dateTime: string } | null = null
+  if (cursor) {
+    try {
+      cursorData = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'))
+    } catch {
+      return NextResponse.json({ error: 'cursor לא תקין' }, { status: 400 })
+    }
+  }
+
+  // On first page, fetch active boosts separately (always shown first, not paginated)
+  const boostedGames = !cursorData
+    ? await prisma.game.findMany({
+        where: {
+          ...baseWhere,
+          boost: { boostedUntil: { gt: now } },
+        },
+        include: gameInclude,
+        orderBy: { dateTime: 'asc' },
+      })
+    : []
+
+  const boostedIds = new Set(boostedGames.map((g) => g.id))
+
+  // Cursor condition: dateTime > cursor OR (dateTime == cursor AND id > cursorId)
+  const cursorWhere = cursorData
+    ? {
+        OR: [
+          { dateTime: { gt: new Date(cursorData.dateTime) } },
+          { dateTime: { equals: new Date(cursorData.dateTime) }, id: { gt: cursorData.id } },
+        ],
+      }
+    : {}
+
+  const nonBoostedWhere = {
+    ...baseWhere,
+    ...cursorWhere,
+    NOT: boostedIds.size > 0 ? { id: { in: Array.from(boostedIds) } } : undefined,
+  }
+
+  // Fetch limit+1 to determine if there are more pages
+  const nonBoosted = await prisma.game.findMany({
+    where: nonBoostedWhere,
+    include: gameInclude,
+    orderBy: [{ dateTime: 'asc' }, { id: 'asc' }],
+    take: limit + 1,
   })
 
-  return NextResponse.json(addAvgRating(games, now))
+  const hasMore = nonBoosted.length > limit
+  const pageGames = nonBoosted.slice(0, limit)
+
+  const allGames = [...boostedGames, ...pageGames]
+  const processed = addAvgRating(allGames, now)
+
+  const lastNonBoosted = pageGames[pageGames.length - 1]
+  const nextCursor = hasMore && lastNonBoosted
+    ? Buffer.from(JSON.stringify({ id: lastNonBoosted.id, dateTime: lastNonBoosted.dateTime.toISOString() }), 'utf8').toString('base64url')
+    : null
+
+  return NextResponse.json({ games: processed, nextCursor })
 }
 
 export async function POST(req: Request) {
@@ -214,7 +276,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json(game, { status: 201 })
   } catch (err) {
-    console.error('Create game error:', err)
+    logger.error({ err }, 'Create game error')
     return NextResponse.json({ error: 'שגיאה ביצירת המשחק' }, { status: 500 })
   }
 }

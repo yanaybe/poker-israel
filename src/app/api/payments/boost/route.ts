@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { generatePaymentLink, BOOST_OPTIONS } from '@/lib/payplus'
+import { logger } from '@/lib/logger'
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions)
@@ -28,7 +29,7 @@ export async function POST(req: Request) {
     })
     return NextResponse.json({ url })
   } catch (err) {
-    console.error('PayPlus boost error:', err)
+    logger.error({ err }, 'PayPlus boost error')
     return NextResponse.json({ error: 'שגיאה ביצירת קישור תשלום' }, { status: 500 })
   }
 }

@@ -15,12 +15,13 @@ export interface FilterState {
 
 interface GameFiltersProps {
   onFilter: (filters: FilterState) => void
+  initialFilters?: FilterState
 }
 
 const defaultFilters: FilterState = { city: '', gameType: '', stakes: '', status: '' }
 
-export function GameFilters({ onFilter }: GameFiltersProps) {
-  const [filters, setFilters] = useState<FilterState>(defaultFilters)
+export function GameFilters({ onFilter, initialFilters }: GameFiltersProps) {
+  const [filters, setFilters] = useState<FilterState>(initialFilters ?? defaultFilters)
   const [open, setOpen] = useState(false)
 
   const hasActive = Object.values(filters).some(Boolean)

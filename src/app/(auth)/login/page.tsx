@@ -95,6 +95,12 @@ export default function LoginPage() {
           </Button>
         </form>
 
+        <div className="mt-4 text-center">
+          <Link href="/forgot-password" className="text-sm text-poker-subtle hover:text-gold-400 transition-colors">
+            שכחת סיסמה?
+          </Link>
+        </div>
+
         <div className="mt-6 pt-5 border-t border-felt-700/50 text-center">
           <p className="text-sm text-poker-muted">
             אין לך חשבון?{' '}

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { prisma } from '@/lib/db'
+import { logger } from '@/lib/logger'
 
 // PayPlus sends: POST with JSON body
 // Signature header: x-payplus-signature (HMAC-SHA256 of raw body with secret-key)
@@ -9,7 +10,7 @@ import { prisma } from '@/lib/db'
 function verifySignature(rawBody: string, signature: string): boolean {
   const secret = process.env.PAYPLUS_SECRET_KEY
   if (!secret) {
-    console.error('PAYPLUS_SECRET_KEY is not configured')
+    logger.error('PAYPLUS_SECRET_KEY is not configured')
     return false
   }
   const computed = crypto
@@ -62,7 +63,7 @@ export async function POST(req: Request) {
 
   // Validate moreInfo format before processing (type:id:optionalExtra)
   if (!/^(sub|boost):[a-zA-Z0-9_-]+(:[a-zA-Z0-9_-]+)*$/.test(moreInfo)) {
-    console.error('Webhook: unexpected moreInfo format', { moreInfo, transactionUid })
+    logger.error({ moreInfo, transactionUid }, 'Webhook: unexpected moreInfo format')
     return NextResponse.json({ ok: true })
   }
 
@@ -72,6 +73,19 @@ export async function POST(req: Request) {
     ? rawAmount
     : parseFloat(String(rawAmount) || '0')
 
+  // Idempotency: reject duplicate deliveries for the same transaction
+  const already = await prisma.webhookEvent.findUnique({ where: { transactionUid } })
+  if (already) return NextResponse.json({ ok: true })
+
+  try {
+    await prisma.webhookEvent.create({
+      data: { transactionUid, payload: rawBody },
+    })
+  } catch {
+    // Race condition: another request beat us — safe to ignore
+    return NextResponse.json({ ok: true })
+  }
+
   try {
     const [type, ...parts] = moreInfo.split(':')
 
@@ -79,7 +93,7 @@ export async function POST(req: Request) {
       const [gameId, hoursStr] = parts
       const hours = parseInt(hoursStr, 10)
       if (!gameId || isNaN(hours) || hours <= 0) {
-        console.error('Webhook: invalid boost params', { gameId, hoursStr })
+        logger.error({ gameId, hoursStr }, 'Webhook: invalid boost params')
         return NextResponse.json({ ok: true })
       }
 
@@ -107,7 +121,7 @@ export async function POST(req: Request) {
     if (type === 'sub') {
       const [userId] = parts
       if (!userId) {
-        console.error('Webhook: missing userId in sub moreInfo', { moreInfo })
+        logger.error({ moreInfo }, 'Webhook: missing userId in sub moreInfo')
         return NextResponse.json({ ok: true })
       }
 
@@ -138,7 +152,7 @@ export async function POST(req: Request) {
       })
     }
   } catch (err) {
-    console.error('Webhook processing error:', err)
+    logger.error({ err }, 'Webhook processing error')
     return NextResponse.json({ error: 'Processing failed' }, { status: 500 })
   }
 

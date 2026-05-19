@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { z } from 'zod'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
+import { logger } from '@/lib/logger'
 
 const ApprovalSchema = z.object({
   status: z.enum(['APPROVED', 'REJECTED'], { required_error: 'סטטוס לא תקין' }),
@@ -112,7 +113,7 @@ export async function PATCH(
 
     return NextResponse.json(updated.request)
   } catch (err) {
-    console.error('Request approval error:', err)
+    logger.error({ err }, 'Request approval error')
     return NextResponse.json({ error: 'שגיאה בעדכון הבקשה' }, { status: 500 })
   }
 }

@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/Button'
 import { Modal } from '@/components/ui/Modal'
 import { Textarea } from '@/components/ui/Textarea'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
+import { ReportButton } from '@/components/ui/ReportButton'
 import { GameCard } from '@/components/games/GameCard'
 import {
   formatDate, formatCurrency, formatHouseFee, getGameTypeIcon, getStatusColor, getSkillColor, cn,
@@ -712,6 +713,13 @@ export default function GameDetailPage() {
               </div>
             )}
           </div>
+
+          {/* Report */}
+          {!isHost && (
+            <div className="flex justify-end">
+              <ReportButton targetGameId={game.id} targetUserId={game.host.id} />
+            </div>
+          )}
 
           {/* Action buttons */}
           {!isHost && !isCancelled && (

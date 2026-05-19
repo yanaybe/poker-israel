@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { generatePaymentLink } from '@/lib/payplus'
+import { logger } from '@/lib/logger'
 
 export async function POST() {
   const session = await getServerSession(authOptions)
@@ -17,7 +18,7 @@ export async function POST() {
     })
     return NextResponse.json({ url })
   } catch (err) {
-    console.error('PayPlus subscribe error:', err)
+    logger.error({ err }, 'PayPlus subscribe error')
     return NextResponse.json({ error: 'שגיאה ביצירת קישור תשלום' }, { status: 500 })
   }
 }

@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { GameCard } from '@/components/games/GameCard'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
+import { ReportButton } from '@/components/ui/ReportButton'
 import { formatDateShort, getSkillColor, cn } from '@/lib/utils'
 import { SKILL_LABELS, type UserProfile, type GameWithHost } from '@/types'
 
@@ -138,12 +139,15 @@ export default function ProfilePage() {
                   </Button>
                 </Link>
               ) : session && (
-                <Link href={`/messages/${user.id}`}>
-                  <Button size="sm" className="gap-2">
-                    <MessageCircle className="w-4 h-4" />
-                    שלח הודעה
-                  </Button>
-                </Link>
+                <div className="flex items-center gap-3">
+                  <Link href={`/messages/${user.id}`}>
+                    <Button size="sm" className="gap-2">
+                      <MessageCircle className="w-4 h-4" />
+                      שלח הודעה
+                    </Button>
+                  </Link>
+                  <ReportButton targetUserId={user.id} />
+                </div>
               )}
             </div>
           </div>

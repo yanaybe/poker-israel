@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/db'
 import { ISRAELI_CITIES } from '@/types/index'
+import { logger } from '@/lib/logger'
 
 // 5MB base64 limit. Base64 encoding adds ~33% overhead, so 5MB string ≈ ~3.75MB image.
 // This is a temporary ceiling until images are migrated to Cloudinary/S3.
@@ -75,7 +76,7 @@ export async function PATCH(req: Request) {
 
     return NextResponse.json(user)
   } catch (err) {
-    console.error('Update user error:', err)
+    logger.error({ err }, 'Update user error')
     return NextResponse.json({ error: 'שגיאה בעדכון הפרופיל' }, { status: 500 })
   }
 }
