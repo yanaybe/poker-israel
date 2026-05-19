@@ -1,3 +1,52 @@
+// TODO [HIGH][Security]:
+// Location reveal logic is partially enforced server-side (location is null in response
+// if not revealed), BUT the `locationRevealed` flag sent to client allows the frontend
+// to bypass the reveal by directly calling this endpoint and reading the raw response.
+// Fix: Never send the raw `location` field before reveal time. The current code
+// sets `location: null` correctly when not revealed — verify this is never bypassed.
+// Also: Ensure the `location` field is not accidentally included in `requests` or
+// other nested relations returned in the same response.
+// Risk: Users with DevTools can potentially access addresses before the reveal window.
+
+// TODO [HIGH][Performance]:
+// GET /api/games/[id] makes 3 DB queries sequentially after the initial game fetch:
+//   1. Check approved request for location reveal
+//   2. Fetch ALL host ratings (allHostRatings)
+//   3. Fetch ALL past games + their approved requests (pastGames)
+// For a popular host with 100 games and 500 ratings, queries 3 returns 500+ rows.
+// Fix: Denormalize avgRating, returnRate, gamesHosted onto User. Update via background job.
+// Risk: Game detail page becomes slow for established hosts.
+
+// TODO [HIGH][Backend]:
+// PATCH handler accepts arbitrary body with minimal validation:
+// `body.maxPlayers && { maxPlayers: parseInt(body.maxPlayers) }` — if maxPlayers < currentPlayers,
+// the game would appear to have more players than capacity allows.
+// Fix: Validate that new maxPlayers >= currentPlayers when changing capacity.
+// Risk: Game shows impossible state (currentPlayers=8, maxPlayers=5).
+
+// TODO [MEDIUM][Backend]:
+// DELETE hard-deletes the game record. All associated requests, ratings, boosts,
+// and notification references to this gameId become orphaned or cascade-deleted.
+// Fix: Implement soft delete (set deletedAt = now()) instead of hard delete.
+// Allow the game to remain visible as "deleted" for ratings/history purposes.
+// Risk: Irreversible data loss; host deletes game to avoid bad reviews.
+
+// TODO [MEDIUM][Trust & Safety]:
+// A host can delete a game to avoid strike consequences (delete before cancelling).
+// Fix: If a game has approved players and dateTime is in the future, deleting should
+// trigger the same strike logic as cancellation, or block deletion entirely.
+// Risk: Hosts avoid accountability by deleting games instead of cancelling.
+
+// TODO [MEDIUM][Backend]:
+// Strike threshold (3 strikes → 30-day suspension) is hardcoded.
+// Fix: Move to platform config: STRIKE_THRESHOLD=3, SUSPENSION_DAYS=30.
+// Risk: Cannot adjust moderation policy without code deployment.
+
+// TODO [LOW][Backend]:
+// No audit log on PATCH/DELETE. There is no record of who changed what and when.
+// Fix: Create a GameAuditLog table: { gameId, actorId, action, previousState, newState, createdAt }
+// Risk: Disputes about game modifications cannot be resolved without audit trail.
+
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'

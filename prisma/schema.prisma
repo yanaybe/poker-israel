@@ -1,7 +1,73 @@
+// TODO [CRITICAL][DevOps]:
+// The build script in package.json runs `prisma db push` in production.
+// `prisma db push` is a destructive schema sync tool NOT intended for production.
+// It can silently drop columns or tables containing real user data.
+// Fix: Replace build script with `prisma migrate deploy` which applies versioned,
+// reversible migrations. Set up `prisma migrate dev` in development workflow.
+// Risk: A deploy to production can DESTROY DATA with no warning or rollback.
+
+// TODO [HIGH][Database]:
+// Using SQLite as datasource. SQLite does not support:
+//   - Concurrent writes at production scale
+//   - PostGIS geospatial extensions (needed for proper location queries)
+//   - Proper connection pooling
+//   - Row-level locking for transactions
+// Fix: Switch to PostgreSQL in all environments. Update DATABASE_URL accordingly.
+// The schema is PostgreSQL-compatible, just change provider to "postgresql".
+// Risk: SQLite write locks cause data corruption under concurrent users.
+
+// TODO [HIGH][Database]:
+// Critical indexes are missing on all filter/sort columns. Every filtered query
+// does a full table scan. See inline TODO comments below for specific indexes.
+// Fix: Add @@index() directives (listed per model below) and run migration.
+// Risk: Queries become O(n) as data grows — games list will time out at 10k+ rows.
+
+// TODO [HIGH][Database]:
+// No soft-delete pattern implemented. Games are hard-deleted (DELETE FROM games).
+// This means: no audit trail, ratings/requests for deleted games become orphaned
+// references, and no ability to recover accidental deletions.
+// Fix: Add `deletedAt DateTime?` to Game (and LfgPost). Filter on `deletedAt IS NULL`.
+// Risk: Deleted game data is unrecoverable; orphaned records cause integrity issues.
+
+// TODO [MEDIUM][Database]:
+// Enum values are stored as plain String fields throughout the schema
+// (Game.status, Game.gameType, GameRequest.status, etc.) instead of Prisma enums.
+// This allows invalid values to be written to the DB without a constraint violation.
+// Fix: Convert all status/type String fields to proper Prisma enum types.
+// Risk: Invalid status values can be written to DB, causing undefined behavior in UI.
+
+// TODO [MEDIUM][Database]:
+// No updatedAt on GameRequest, Message, Strike, or Notification models.
+// Cannot determine when a request was last modified, which is needed for auditing
+// and for "updated since" polling strategies.
+// Fix: Add `updatedAt DateTime @updatedAt` to GameRequest and Message.
+// Risk: Cannot implement efficient delta-sync or audit logs without timestamps.
+
+// TODO [MEDIUM][Database]:
+// User model has no: emailVerified, isBanned, isAdmin, phoneNumber, lastLoginAt fields.
+// These are all needed for the trust/safety and admin systems.
+// Fix: Add in a new migration.
+// Risk: Cannot implement email verification, banning, or admin features without schema changes.
+
+// TODO [MEDIUM][Database]:
+// LfgPost.gameTypes stores comma-separated values as a String ("CASH,TOURNAMENT").
+// This is an anti-pattern — cannot efficiently query "all LFG posts for CASH games".
+// Fix: Create a LfgPostGameType join table or use a PostgreSQL array column.
+// Risk: Filtering LFG by game type requires fetching all and filtering in application layer.
+
+// TODO [LOW][Database]:
+// No migration history or strategy documented. `prisma db push` usage means there
+// is no migration history file. Starting from scratch with proper migrations requires
+// a planned approach to avoid data loss on the first `prisma migrate dev`.
+// Fix: Document and execute migration setup before any production deployment.
+// Risk: First proper migration attempt on a populated database could fail.
+
 generator client {
   provider = "prisma-client-js"
 }
 
+// TODO [CRITICAL][DevOps]: Change provider to "postgresql" for production.
+// SQLite is dev-only and does not support concurrent writes at scale.
 datasource db {
   provider = "sqlite"
   url      = env("DATABASE_URL")
@@ -15,7 +81,20 @@ model User {
   age              Int?
   city             String?
   skillLevel       String    @default("BEGINNER")
+  // TODO [HIGH][Security]: image stores base64-encoded data directly in the DB.
+  // This bloats every user query with potentially megabytes of image data.
+  // Fix: Upload images to Cloudinary/S3 and store only the URL here.
+  // Risk: DB size grows dramatically with user images; all user queries are slow.
   image            String?
+  // TODO [HIGH][Trust & Safety]: Add missing fields for platform safety:
+  // emailVerified    DateTime?   // Email verification timestamp
+  // phoneNumber      String?     // For SMS verification
+  // isBanned         Boolean     @default(false)
+  // banReason        String?
+  // isAdmin          Boolean     @default(false)
+  // lastLoginAt      DateTime?
+  // tokenVersion     Int         @default(0)  // For JWT revocation
+  // reportCount      Int         @default(0)  // Auto-flag after threshold
   canHostUntil     DateTime?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
@@ -40,6 +119,15 @@ model Strike {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   gameId    String
   createdAt DateTime @default(now())
+
+  // TODO [HIGH][Database]: Add index on (userId, createdAt) — this combination is
+  // queried in EVERY game cancellation to count strikes in last 60 days.
+  // Without it, every cancellation does a full scan of the Strike table.
+  // @@index([userId, createdAt])
+
+  // TODO [MEDIUM][Database]: No reason/type for the strike. All strikes are
+  // for late cancellation — but future strike types (no-show, fraud) need a type field.
+  // Add: strikeType String @default("LATE_CANCELLATION")
 }
 
 model Game {
@@ -48,10 +136,20 @@ model Game {
   host             User     @relation("GameHost", fields: [hostId], references: [id], onDelete: Cascade)
   title            String
   neighborhood     String?
+  // TODO [HIGH][Security]: location stores the full home address in plaintext.
+  // This is revealed 2 hours before the game, but the raw value is in every DB backup.
+  // Fix: Encrypt location field at-rest using application-level encryption.
+  // Only decrypt when reveal conditions are met (server-side, never send raw to client early).
+  // Risk: DB breach exposes every host's home address.
   location         String
   city             String
+  // TODO [HIGH][Database]: Missing indexes — city, gameType, status, dateTime
+  // are all used as WHERE filters in GET /api/games but have no indexes.
+  // Add @@index([city, status, dateTime]) and @@index([gameType]) below.
   dateTime         DateTime
   buyIn            Int
+  // TODO [MEDIUM][Database]: gameType and status use String instead of enum.
+  // Invalid values can be stored. Use Prisma enum types.
   gameType         String
   stakes           String
   houseFeeType     String?
@@ -67,12 +165,25 @@ model Game {
   rebuyType        String?
   rebuyCap         Int?
   gamePace         String?
+  // TODO [MEDIUM][Database]: vibeTags stores comma-separated values as a String.
+  // Cannot efficiently query "all games with BEGINNERS_WELCOME tag".
+  // Fix: Create a GameTag join table or use PostgreSQL string_to_array with GIN index.
   vibeTags         String?
   expectedDuration Float?
   hasFood          Boolean  @default(false)
   hasDrinks        Boolean  @default(false)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+
+  // TODO [HIGH][Database]: Add these critical indexes:
+  // @@index([city, status, dateTime])
+  // @@index([gameType])
+  // @@index([hostId])
+  // @@index([status, dateTime])
+
+  // TODO [MEDIUM][Database]: Add deletedAt for soft delete pattern.
+  // deletedAt DateTime?
+  // @@index([deletedAt])
 
   requests      GameRequest[]
   hostRatings   HostRating[]
@@ -86,11 +197,19 @@ model GameRequest {
   game      Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // TODO [MEDIUM][Database]: status is String, not enum. Invalid values possible.
+  // Use Prisma enum: enum RequestStatus { PENDING APPROVED REJECTED WAITLIST }
   status    String   @default("PENDING")
   message   String?
   createdAt DateTime @default(now())
+  // TODO [MEDIUM][Database]: No updatedAt — cannot track when request was approved/rejected.
+  // Add: updatedAt DateTime @updatedAt
 
   @@unique([gameId, userId])
+  // TODO [HIGH][Database]: Add index on userId for "my games" queries.
+  // @@index([userId])
+  // TODO [HIGH][Database]: Add index on (gameId, status) for waitlist queries.
+  // @@index([gameId, status])
 }
 
 model Message {
@@ -99,20 +218,43 @@ model Message {
   sender     User     @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
   receiverId String
   receiver   User     @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+  // TODO [HIGH][Security]: Message content is stored in plaintext.
+  // For a platform where users share home addresses and personal details,
+  // end-to-end or at-rest encryption of messages is important.
+  // Fix: Encrypt content with AES-256-GCM using a per-conversation key.
+  // Risk: DB breach exposes all private conversations including address details.
   content    String
+  // TODO [MEDIUM][UX]: No deletedAt — messages cannot be deleted by sender or admin.
+  // Add: deletedAt DateTime? for soft delete support.
   read       Boolean  @default(false)
   createdAt  DateTime @default(now())
+
+  // TODO [CRITICAL][Database]: Missing indexes — GET /api/messages fetches ALL
+  // messages for a user then builds a Map in memory. Without indexes this is O(n)
+  // full table scan for every conversation list load.
+  // Add these critical indexes:
+  // @@index([senderId, createdAt])
+  // @@index([receiverId, createdAt])
+  // @@index([senderId, receiverId, createdAt])
 }
 
+// TODO [HIGH][Database]: Add index on (userId, createdAt) — notifications are
+// queried by userId with ordering. Without index, full scan every 30 seconds per user.
+// @@index([userId, createdAt])
+// @@index([userId, read]) — for fast unread count queries.
 model Notification {
   id        String   @id @default(cuid())
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // TODO [MEDIUM][Database]: type is String, not enum. Define:
+  // enum NotificationType { REQUEST_APPROVED REQUEST_REJECTED WAITLIST_PROMOTED GAME_CANCELLED NEW_MESSAGE }
   type      String
   message   String
   gameId    String?
   read      Boolean  @default(false)
   createdAt DateTime @default(now())
+  // TODO [LOW][UX]: No expiresAt — old notifications accumulate forever.
+  // Add: expiresAt DateTime? and a cron job to clean up stale notifications.
 }
 
 // Player rates the host after a game
@@ -183,13 +325,46 @@ model LfgPost {
   city          String
   availableText String
   buyIn         Int?
+  // TODO [MEDIUM][Database]: gameTypes is comma-separated String ("CASH,TOURNAMENT").
+  // Cannot efficiently filter by game type. Use a join table or PostgreSQL array.
   gameTypes     String?  // comma-separated: "CASH,TOURNAMENT"
   notes         String?
   status        String   @default("ACTIVE") // ACTIVE | CLOSED
+  // TODO [MEDIUM][Database]: expiresAt is hardcoded to 7 days in application code.
+  // This value should come from a config table, not be hardcoded.
   expiresAt     DateTime
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  // TODO [HIGH][Database]: Add indexes for common query patterns:
+  // @@index([city, status, expiresAt])
+  // @@index([userId, status])
 }
+
+// TODO [HIGH][Trust & Safety]: Add a Report model to track user-submitted reports
+// against games, users, and LFG posts. Currently there is NO reporting mechanism.
+// model Report {
+//   id         String   @id @default(cuid())
+//   reporterId String
+//   reporter   User     @relation("ReportsSubmitted", ...)
+//   targetType String   // 'USER' | 'GAME' | 'LFG_POST'
+//   targetId   String
+//   reason     String
+//   details    String?
+//   status     String   @default("PENDING") // PENDING | REVIEWED | ACTIONED | DISMISSED
+//   createdAt  DateTime @default(now())
+// }
+
+// TODO [HIGH][Analytics]: Add a UserEvent model for analytics tracking.
+// This enables funnel analysis, retention measurement, and A/B testing.
+// model UserEvent {
+//   id        String   @id @default(cuid())
+//   userId    String?
+//   sessionId String?
+//   event     String   // 'PAGE_VIEW' | 'GAME_VIEWED' | 'JOIN_REQUESTED' | ...
+//   metadata  String?  // JSON blob
+//   createdAt DateTime @default(now())
+// }
 
 model Tournament {
   id          String   @id @default(cuid())

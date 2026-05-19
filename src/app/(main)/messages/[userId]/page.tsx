@@ -1,3 +1,47 @@
+// TODO [HIGH][Mobile]:
+// No bottom navigation bar. On mobile, users must reach to the top of the screen
+// to navigate away from chat. Primary actions (send, back) are accessible but
+// the overall mobile navigation pattern doesn't follow mobile-first conventions.
+// Fix: Add a bottom tab bar for primary navigation (Games, Messages, Notifications, Profile).
+// Risk: Poor mobile UX; high bounce rate from mobile users.
+
+// TODO [HIGH][UX]:
+// No typing indicator. Users don't know if the other person is composing a reply.
+// Fix: On textarea focus/change, emit 'typing' event via WebSocket. Display
+// "מקליד..." in the chat header for 3 seconds after last keystroke.
+// Risk: Users think the other person isn't there and send duplicate messages.
+
+// TODO [HIGH][Trust & Safety]:
+// No way to block or report a user from the chat interface.
+// Fix: Add "..." menu to chat header with "Block User" and "Report User" options.
+// Risk: Harassment continues unchecked within the chat system.
+
+// TODO [MEDIUM][UX]:
+// Messages are not paginated. Opening a conversation with 1,000 messages loads all of them.
+// Fix: Load last 50 messages initially. On scroll-to-top, load previous 50.
+// Use IntersectionObserver on the first message to trigger "load more".
+// Risk: Long conversations cause browser to freeze; high memory usage on mobile.
+
+// TODO [MEDIUM][Mobile]:
+// Keyboard push behavior on mobile: when the soft keyboard opens, the message
+// input is pushed up but the scroll position may not adjust correctly,
+// causing the last message to be hidden behind the keyboard.
+// Fix: Use `visualViewport` API to detect keyboard height and adjust padding.
+// Risk: Users cannot see their own messages while typing on mobile.
+
+// TODO [MEDIUM][UX]:
+// No read receipts visible to sender. The `read` field exists in Message model
+// but is not shown in the UI (✓ vs ✓✓ pattern like WhatsApp).
+// Fix: Show a single checkmark for sent, double checkmark for read.
+// Update sender's UI in real-time via WebSocket when receiver opens the message.
+// Risk: Users don't know if their message was received/read.
+
+// TODO [LOW][Security]:
+// Message content is rendered directly as text (not HTML), which is correct.
+// However, if ever switched to dangerouslySetInnerHTML for formatting (bold, links),
+// XSS would be introduced. Add explicit note to never use dangerouslySetInnerHTML here.
+// Risk: Future developer accidentally introduces XSS.
+
 'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
@@ -51,7 +95,25 @@ export default function ChatPage() {
     scrollToBottom()
   }, [messages])
 
+  // TODO [HIGH][Architecture]:
+  // Polling every 3 seconds creates a constant stream of HTTP requests and DB queries.
+  // At 100 concurrent chat users: 100 req/3s = 2,000 DB queries/minute just for chat.
+  // This approach does not scale beyond a few dozen simultaneous conversations.
+  //
+  // Fix: Replace polling with WebSocket (Socket.io) or Server-Sent Events:
+  //   1. On chat open, establish a WebSocket connection to /api/socket
+  //   2. Server pushes new messages to the open connection
+  //   3. Remove the setInterval polling entirely
+  //
+  // If WebSocket is too complex initially, use Pusher or Ably (managed WebSocket):
+  //   - Pusher free tier: 100 connections, 200k messages/day
+  //   - Zero infrastructure overhead
+  //
+  // Risk: Platform cannot handle more than ~50 concurrent chat users.
+  // Battery drain on mobile due to constant polling.
+
   // Poll for new messages every 3 seconds
+  // TODO [HIGH][Performance]: Replace this polling with WebSocket push (see above).
   useEffect(() => {
     const interval = setInterval(fetchMessages, 3000)
     return () => clearInterval(interval)

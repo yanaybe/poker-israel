@@ -1,3 +1,30 @@
+// TODO [HIGH][Architecture]:
+// These TypeScript types are manually maintained in parallel with the Prisma schema.
+// If a field is added to the Prisma schema, it must also be added here — two sources of truth.
+// Fix: Use Prisma's generated types directly (import from '@prisma/client').
+// Or use `zod-prisma-types` to auto-generate Zod schemas from Prisma schema.
+// Risk: Schema and TypeScript types diverge → runtime shape mismatches.
+
+// TODO [MEDIUM][Architecture]:
+// GameWithHost.host includes `canHostUntil` which is a suspension date.
+// This private moderation field is part of the public-facing game type and
+// included in API responses. It should not be in a public-facing interface.
+// Fix: Remove canHostUntil from GameWithHost.host. Only include it in admin types.
+// Risk: Suspension details leaked to frontend and potentially rendered in UI.
+
+// TODO [MEDIUM][Architecture]:
+// ISRAELI_CITIES duplicates CITY_COORDS keys in src/lib/utils.ts.
+// Any city added to one list must be manually added to the other.
+// Fix: Single source of truth: define cities with coordinates in one place.
+// Risk: Cities appear in dropdown but have no coordinates → distance shows null.
+
+// TODO [LOW][Architecture]:
+// No API response types or API error types defined. Frontend components use
+// raw `any` or assumed shapes from API calls with no compile-time guarantees.
+// Fix: Define ApiResponse<T>, ApiError types. Use these as return types
+// for all fetch calls in components.
+// Risk: API shape changes break frontend silently at runtime.
+
 export type SkillLevel = 'BEGINNER' | 'INTERMEDIATE' | 'PRO'
 export type GameType = 'CASH' | 'TOURNAMENT' | 'SIT_AND_GO'
 export type GameStatus = 'OPEN' | 'FULL' | 'CLOSED' | 'CANCELLED'

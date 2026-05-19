@@ -1,3 +1,35 @@
+// TODO [HIGH][Security]:
+// No CAPTCHA or bot detection on the login form. Bots can script login attempts.
+// Fix: Add hCaptcha or Cloudflare Turnstile (both have free tiers).
+// Only show CAPTCHA after N failed attempts to minimize friction for real users.
+// Risk: Automated brute-force attacks on user accounts.
+
+// TODO [HIGH][Security]:
+// No "forgot password" link on this page. Users who forget their password have
+// no recovery path and must contact support (which doesn't exist yet).
+// Fix: Add forgot password flow: email → time-limited reset link → new password form.
+// Requires email service integration (Resend/SendGrid).
+// Risk: Users are permanently locked out if they forget their password.
+
+// TODO [MEDIUM][UX]:
+// No "remember me" option. JWT expires (once maxAge is configured) and users
+// must re-login on every device after expiry with no option for longer sessions.
+// Fix: Add a "remember me" checkbox that extends JWT maxAge to 30 days.
+// Risk: Users find repeated logins frustrating, especially on mobile.
+
+// TODO [MEDIUM][UX]:
+// callbackUrl from searchParams is used without validation:
+// `router.push(searchParams.get('callbackUrl') ?? '/games')`
+// An open redirect: ?callbackUrl=https://evil.com could redirect users after login.
+// Fix: Validate callbackUrl starts with '/' (relative path only).
+// Risk: Open redirect vulnerability — phishing attack vector.
+
+// TODO [LOW][Analytics]:
+// No login event tracking. Cannot measure daily active users, login frequency,
+// or detect unusual login patterns.
+// Fix: Log LOGIN_SUCCESS and LOGIN_FAILURE events to analytics on form submit.
+// Risk: No data on user engagement or security anomalies.
+
 'use client'
 
 import { useState } from 'react'
@@ -96,7 +128,16 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {/* Demo hint */}
+        {/* TODO [CRITICAL][Security]:
+            Demo credentials (david@example.com / password123) are hardcoded and
+            VISIBLE in the production login page. This is the single most trust-destroying
+            element on the platform — any knowledgeable user who sees this immediately
+            knows the platform is not production-ready.
+            Fix: Remove this entire block before any public launch.
+            Also: Change the demo account passwords and remove them from seed data,
+            or gate the demo UI behind a DEMO_MODE environment variable.
+            Risk: Permanent trust damage; demo credentials used by malicious actors
+            to create fake games under the demo account. */}
         <div className="mt-4 p-3 bg-felt-800/50 rounded-xl border border-felt-700/30">
           <p className="text-xs text-poker-subtle text-center">
             Demo: david@example.com / password123

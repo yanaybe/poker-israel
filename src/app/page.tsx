@@ -1,3 +1,52 @@
+// TODO [HIGH][Legal]:
+// Landing page footer says "גיל 18+ לשחקנים אחראיים בלבד" but there is no actual
+// age gate on registration or in the app. This disclaimer is not legally sufficient.
+// Fix: Implement actual age verification: required age field on registration (18+),
+// enforced server-side. For hosts of real-money games, consider ID verification.
+// Risk: Legal liability if minors are found using the platform despite the disclaimer.
+
+// TODO [HIGH][Legal]:
+// No links to Terms of Service or Privacy Policy on the landing page.
+// These documents don't appear to exist in the codebase at all.
+// Fix: Create /terms and /privacy pages. Link them in footer.
+// Israeli Privacy Protection Law requires disclosure of data collection practices.
+// Risk: Operating without privacy policy is a legal violation in Israel.
+
+// TODO [HIGH][Marketplace]:
+// Landing page has no social proof. No real testimonials, no real host profiles,
+// no real game examples. The value proposition is abstract.
+// Fix: Add 2-3 real host testimonials (get from beta users). Show a live preview
+// of a real upcoming game (anonymized). Show real user count from DB.
+// Risk: Visitors cannot evaluate trustworthiness — conversion rate near zero.
+
+// TODO [HIGH][SEO]:
+// Landing page is rendered client-side ('use client') which means search engines
+// see an empty shell. The entire poker discovery value proposition is invisible to SEO.
+// Fix: Convert landing page to a server component. Only the auth redirect logic
+// needs to be client-side — extract it to a small ClientRedirect component.
+// Risk: Zero organic search traffic — no one discovers the platform via Google.
+
+// TODO [MEDIUM][Growth]:
+// No viral/referral mechanism on landing page. Users who want to invite friends
+// have no obvious path to do so.
+// Fix: Add "Invite friends to the table" referral section with shareable link.
+// Give referrer and referee a benefit (1 free premium month).
+// Risk: Organic growth relies entirely on word-of-mouth without structured incentive.
+
+// TODO [MEDIUM][UX]:
+// No demo / "try before you sign up" experience. Users must register to see any games.
+// Fix: Show a preview of 3 real upcoming games on the landing page (public, no auth needed).
+// Games page is already accessible without auth — link to it prominently.
+// Risk: Users bounce because they can't evaluate the product before committing.
+
+// TODO [LOW][Analytics]:
+// No tracking on the landing page. Cannot measure:
+// - How many visitors hit the landing page?
+// - What's the signup conversion rate?
+// - What device/country are visitors from?
+// Fix: Add PostHog or Google Analytics (with cookie consent). Track CTA clicks.
+// Risk: No data to optimize the landing page or measure marketing effectiveness.
+
 'use client'
 
 import { useSession } from 'next-auth/react'
@@ -86,6 +135,17 @@ export default function HomePage() {
         </div>
 
         {/* Stats bar */}
+        {/* TODO [CRITICAL][Trust]:
+            These stats ("500+ שחקנים רשומים", "50+ משחקים פעילים", "10+ ערים") are
+            HARDCODED FAKE NUMBERS. Any sophisticated user (investor, journalist, power user)
+            who sees 50+ active games on the stats counter but opens the games page to find
+            3 games will immediately lose all trust in the platform.
+            Fix: Either:
+            1. Fetch real stats from /api/stats endpoint (SELECT COUNT(*) queries)
+            2. Remove the stats bar entirely until real numbers are meaningful
+            3. Use more defensible language: "קהילה גדלה ←" instead of fake numbers
+            Risk: Permanent credibility damage. Fake numbers destroy trust faster than
+            any other single mistake. Remove or make real before ANY public-facing launch. */}
         <div className="max-w-3xl mx-auto mt-16 grid grid-cols-3 gap-4">
           {[
             { value: '500+', label: 'שחקנים רשומים' },

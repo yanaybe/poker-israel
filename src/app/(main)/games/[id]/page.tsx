@@ -140,6 +140,48 @@ function LineupPreview({
   )
 }
 
+// TODO [HIGH][UX]:
+// No error boundary on this page. If the API returns an unexpected shape or
+// the Prisma query fails, the component will throw an unhandled error that
+// crashes the entire page to a blank screen.
+// Fix: Add error.tsx at the (main) route group level for fallback rendering.
+// Risk: Any API error on the game detail page shows a blank page to the user.
+
+// TODO [HIGH][UX]:
+// Similar games are fetched with TWO separate API calls (sequential waterfall):
+//   1. fetch games matching city+gameType+status=OPEN
+//   2. If < 3 results, fetch all open games in city
+// This happens AFTER the main game loads, causing visible loading delay.
+// Fix: Combine into a single optimized query on the server. Or move similar games
+// to a separate lazy-loaded component that doesn't block the main content.
+// Risk: Visible loading flash and double network waterfall on every page load.
+
+// TODO [MEDIUM][Trust & Safety]:
+// No way to report a game from the game detail page. If a user suspects a game
+// is fake, fraudulent, or unsafe, there is no report button.
+// Fix: Add "Report Game" option (accessible via "..." menu to non-hosts).
+// Risk: Fraudulent games stay up with no user mechanism to flag them.
+
+// TODO [MEDIUM][UX]:
+// Edit game (/games/${game.id}/edit) link is shown but this route doesn't exist.
+// Clicking the Pencil edit button navigates to a 404 page.
+// Fix: Create the /games/[id]/edit page, or implement inline editing in the detail page.
+// Risk: Hosts click edit and see a 404 error — broken core workflow.
+
+// TODO [MEDIUM][UX]:
+// No sharing mechanism. Users cannot share a game link to WhatsApp (the primary
+// viral channel for Israeli poker players). The game URL is shareable but there's
+// no "Share" button that generates a rich link preview.
+// Fix: Add a "Share" button that copies the URL and optionally opens WhatsApp share.
+// Add Open Graph meta tags to the game detail page for rich link previews.
+// Risk: Biggest viral channel (WhatsApp group → share game link) is not facilitated.
+
+// TODO [LOW][UX]:
+// The "2 hours before game" timer for address reveal has no countdown visible.
+// Users who are approved don't know exactly when the address will appear.
+// Fix: Show a live countdown: "Address reveals in 1h 47m".
+// Risk: Approved players keep refreshing the page manually.
+
 export default function GameDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { data: session } = useSession()

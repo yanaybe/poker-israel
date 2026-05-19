@@ -1,3 +1,46 @@
+// TODO [HIGH][Performance]:
+// GameCard calls useUserLocation() which reads from localStorage + geolocation API.
+// This hook runs inside every card in the grid. With 50 game cards rendered,
+// 50 instances of this hook are active simultaneously (though the cache mitigates
+// some overhead, the hook state is duplicated 50 times).
+// Fix: Lift useUserLocation() to the parent GamesPage component and pass location
+// as a prop to GameCard. Single hook instance, single location value.
+// Risk: 50x redundant hook instantiations; potential performance regression on mobile.
+
+// TODO [HIGH][UX]:
+// No map integration. The "drive time" text is useful but an interactive map
+// showing game locations (at neighborhood/city level) would significantly improve
+// discovery. Users want to see WHERE games are geographically relative to each other.
+// Fix: Add a map toggle above the game grid using Leaflet + OpenStreetMap (free).
+// Plot games as markers at the city/neighborhood level (not exact address for privacy).
+// Risk: Core discovery UX is inferior to what users expect from location-based apps.
+
+// TODO [MEDIUM][Performance]:
+// haversineKm() is called during render for every card. With 50 cards and distance
+// calculation on each render, this is 50 trigonometric calculations per render cycle.
+// Fix: Memoize with useMemo: const driveTime = useMemo(() => computeDriveTime(...), [city, userLocation])
+// Risk: Unnecessary re-computation on every parent re-render.
+
+// TODO [MEDIUM][UX]:
+// Game card does not indicate if the current user already has a pending/approved
+// request for this game. A user could click "Join" multiple times from the list.
+// Fix: Include user's request status in the game data (already exists in /games/[id]
+// but not in the list response). Show "Pending ⏳" or "Approved ✅" badge on card.
+// Risk: User confusion; duplicate join attempts.
+
+// TODO [MEDIUM][Accessibility]:
+// The entire card is wrapped in a <Link> (anchor tag) but also contains inner
+// buttons (Message, Join). Nested interactive elements inside an anchor violate
+// WCAG accessibility guidelines and cause keyboard navigation issues.
+// Fix: Convert outer Link to a clickable div with role="article" and handle
+// navigation programmatically. Separate button click handlers with e.stopPropagation().
+// Risk: WCAG non-compliance; broken keyboard navigation.
+
+// TODO [LOW][UX]:
+// No "Save/Bookmark" game feature. Users cannot save interesting games to review later.
+// Fix: Add a bookmark icon button on the card. Store bookmarks in a GameBookmark table.
+// Risk: Missed retention mechanic — bookmarked games bring users back to the platform.
+
 'use client'
 
 import Link from 'next/link'

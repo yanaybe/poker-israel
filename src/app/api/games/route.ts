@@ -1,3 +1,54 @@
+// TODO [HIGH][Performance]:
+// GET /api/games returns ALL games in the database with no pagination.
+// The query includes full host data + ALL host ratings for each game.
+// At 1,000 games with 50 ratings each, this fetches 50,000 rating rows per request.
+// Fix: Add cursor-based pagination (?cursor=lastId&limit=20).
+// Add a pre-computed avgRating column on User to avoid joining all ratings.
+// Risk: This endpoint will time out / OOM as the game count grows.
+
+// TODO [HIGH][Performance]:
+// hostRatingsReceived is included in every game's host data to compute avgRating.
+// This is an N+1 pattern at the dataset level — fetching ratings for every host.
+// Fix: Store a denormalized avgRating and ratingCount on User (updated via trigger
+// or background job when new ratings are submitted).
+// Risk: O(total_ratings) data transferred on every games list load.
+
+// TODO [HIGH][Backend]:
+// Client-side filtering: frontend receives all games and filters by city/gameType/stakes/status.
+// This means ALL game data is sent over the network even when 90% is filtered out.
+// Fix: Move all filtering to the DB query (already partially done with WHERE clause,
+// but stakes and the full city filtering are client-side in GameFilters component).
+// Risk: Network bandwidth waste; will be slow on mobile data connections.
+
+// TODO [HIGH][Backend]:
+// No authentication required for GET /api/games — this is correct for discovery,
+// but there's no rate limiting. A bot can scrape all game data including host names,
+// cities, and schedules.
+// Fix: Add rate limiting (100 req/min per IP) and consider omitting sensitive fields
+// (exact location) from unauthenticated responses.
+// Risk: Data scraping, competitive intelligence, host targeting.
+
+// TODO [MEDIUM][Backend]:
+// No validation on POST body fields. `parseInt(buyIn)` where buyIn is undefined
+// returns NaN. `parseInt("999999999999")` stores an absurd value. No max/min checks.
+// Fix: Add Zod schema for game creation with proper bounds:
+// buyIn: z.number().int().min(0).max(100000)
+// maxPlayers: z.number().int().min(2).max(20)
+// dateTime: z.string().datetime().refine(d => new Date(d) > new Date(), 'Must be future')
+// Risk: Invalid data types and out-of-bounds values stored in DB.
+
+// TODO [MEDIUM][Performance]:
+// No caching layer. Every page load by every user hits the database.
+// Fix: Cache the games list in Redis with a 60-second TTL. Invalidate on game
+// creation, update, or deletion. Use Next.js unstable_cache or a Redis client.
+// Risk: Database load scales linearly with active users — bottleneck at ~100 concurrent.
+
+// TODO [MEDIUM][UX]:
+// No "upcoming only" filter. By default, past games are included in results unless
+// the frontend explicitly filters. Users see games that already happened.
+// Fix: Add default filter: dateTime >= now() unless includePast=true is specified.
+// Risk: Bad UX — game list cluttered with past/expired games.
+
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
@@ -5,6 +56,9 @@ import { prisma } from '@/lib/db'
 import { isPremiumHost, getMonthlyPostCount, FREE_GAME_LIMIT } from '@/lib/premium'
 
 export async function GET(req: Request) {
+  // TODO [HIGH][Backend]: Add pagination params parsing here.
+  // const limit = parseInt(searchParams.get('limit') ?? '20')
+  // const cursor = searchParams.get('cursor') ?? undefined
   const { searchParams } = new URL(req.url)
   const hostId = searchParams.get('hostId')
   const city = searchParams.get('city')
@@ -111,6 +165,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'חסרים שדות חובה' }, { status: 400 })
     }
 
+    // TODO [MEDIUM][Security]: buyIn: parseInt(buyIn) — if buyIn is undefined or
+    // a non-numeric string, this produces NaN which Prisma may accept or reject
+    // inconsistently. Always validate numeric fields before parseInt.
+    // TODO [MEDIUM][Security]: No bounds checking. buyIn could be -1 or 999999999.
+    // Add: if (parsedBuyIn < 0 || parsedBuyIn > 100000) return 400
+    // TODO [MEDIUM][Security]: dateTime is not validated as a future date.
+    // A game can be created with a past dateTime, polluting the games list.
     const game = await prisma.game.create({
       data: {
         hostId: session.user.id,

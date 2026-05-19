@@ -1,3 +1,52 @@
+// TODO [HIGH][Performance]:
+// This page fetches ALL games from /api/games with no pagination.
+// If there are 500 games, all 500 are fetched, transferred, and rendered.
+// Fix: Implement server-side pagination. Render initial 20 games. Load more on scroll.
+// Use IntersectionObserver for infinite scroll or manual "Load more" button.
+// Risk: Page load time increases linearly with game count. Will crash mobile browsers.
+
+// TODO [HIGH][UX]:
+// Filtering is entirely client-side. All games are fetched first, then filtered
+// by city/gameType/stakes/status in JavaScript. This means:
+//   1. All data is sent over the network even when 90% is irrelevant
+//   2. Filter changes are instant (good) but at the cost of pre-loading everything
+// Fix: Move filtering to server-side query params on /api/games.
+// Use URLSearchParams to reflect filters in the URL (shareable links!).
+// Risk: At scale, massive data transfer; filter changes cause full re-fetches.
+
+// TODO [HIGH][UX]:
+// Empty state when no games are found could be more actionable.
+// Currently shows: "אין משחקים כרגע" with create game CTA.
+// Should show: "No games in Tel Aviv right now. [Post a game] [Set up alert]"
+// Fix: Context-aware empty states based on which filter is active.
+// Risk: Users with city filter set see "no games" without realizing games exist in other cities.
+
+// TODO [MEDIUM][Marketplace]:
+// No "alert me when a game is posted" feature on the empty state.
+// This is the highest-value retention action when supply is low.
+// Fix: Add a "Notify me when a game is posted in [city]" button.
+// Store alert preference. Send push/email when a matching game is created.
+// Risk: Users who find no games leave and never return.
+
+// TODO [MEDIUM][UX]:
+// Page title shows total filtered count but not pagination info.
+// "מציג 20 מתוך 150 משחקים" would communicate scale and invite scrolling.
+// Fix: Add count display and pagination controls.
+// Risk: Users don't know how many games exist beyond the visible set.
+
+// TODO [MEDIUM][SEO]:
+// This page uses 'use client' which prevents SSR/SSG of game listings.
+// Search engines cannot index game listings, which is the core content.
+// Fix: Prefetch initial game data on the server and hydrate client.
+// Or use Next.js Server Components for the initial data load.
+// Risk: Platform invisible to Google — massive missed organic traffic opportunity.
+
+// TODO [LOW][UX]:
+// No sorting options. Games are sorted by dateTime ascending (soonest first).
+// Users may want: newest posted, closest to me, highest stakes, lowest buy-in.
+// Fix: Add a sort dropdown. Pass sort parameter to /api/games.
+// Risk: Discovery is limited to chronological order only.
+
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'

@@ -1,3 +1,39 @@
+// TODO [HIGH][Mobile]:
+// No bottom navigation bar for mobile. All navigation is in a hamburger menu
+// that requires top-of-screen reach. Industry standard for mobile-first apps
+// is a persistent bottom tab bar with 4-5 primary destinations.
+// Fix: Add a BottomNav component visible only on mobile (<lg breakpoint) with:
+// Games | Messages | Notifications | Profile | Create (+)
+// Risk: Poor mobile UX — one of the leading causes of app abandonment.
+
+// TODO [HIGH][UX]:
+// Notification badge shows count > 9 as "9+" but doesn't show individual
+// notification types (join requests vs. game notifications) in the count.
+// A host with 10 pending requests + 5 game notifications sees just "9+".
+// Fix: Show separate badges for pending requests and unread notifications.
+// Risk: Hosts don't know how many join requests need immediate attention.
+
+// TODO [MEDIUM][UX]:
+// No push notification permission request. The app could request Web Push
+// permission when the user first receives a notification, enabling native
+// browser push even when the tab is closed.
+// Fix: After first notification appears, show a "Enable push notifications?" prompt.
+// Use the Web Push API with a service worker for delivery.
+// Risk: Users miss time-critical notifications (game cancelled, join approved).
+
+// TODO [MEDIUM][Accessibility]:
+// Hamburger menu does not trap focus when open. Screen reader users can navigate
+// behind the menu while it's open, creating a confusing experience.
+// Fix: Implement focus trap in the mobile menu using a library like focus-trap-react.
+// Risk: WCAG 2.1 non-compliance; inaccessible to screen reader users.
+
+// TODO [LOW][UX]:
+// Notification dropdown has no "View All" link to a notifications history page.
+// Only last 30 notifications shown in dropdown; older ones are unreachable.
+// Fix: Add "View all notifications →" link at bottom of dropdown.
+// Create /notifications page with full paginated notification history.
+// Risk: Users miss older notifications they haven't seen yet.
+
 'use client'
 
 import Link from 'next/link'
@@ -49,8 +85,17 @@ export function Navbar() {
     } catch {}
   }, [session])
 
+  // TODO [HIGH][Performance]:
+  // Notification polling every 30 seconds from every authenticated user.
+  // At 500 logged-in users: 500 requests/30s = ~1,000 DB queries/minute just for notifications.
+  // Each query runs 2 parallel DB queries (pendingRequests + notifications).
+  // Fix: Replace with Server-Sent Events or WebSocket push from server.
+  // Alternative: Use a lightweight Redis pub/sub to push notification counts.
+  // Risk: DB becomes a bottleneck at ~200+ concurrent authenticated users.
+
   useEffect(() => {
     fetchNotifs()
+    // TODO [HIGH][Performance]: Replace setInterval polling with WebSocket/SSE push.
     const interval = setInterval(fetchNotifs, 30000)
     return () => clearInterval(interval)
   }, [fetchNotifs])

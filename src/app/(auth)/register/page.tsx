@@ -1,3 +1,42 @@
+// TODO [HIGH][Legal]:
+// No Terms of Service checkbox on the registration form. Users are not asked
+// to explicitly agree to ToS or Privacy Policy before creating an account.
+// Fix: Add a required checkbox: "I agree to the Terms of Service and Privacy Policy"
+// with links to both documents. Store acceptance timestamp in User.termsAcceptedAt.
+// Risk: Cannot prove user consent — legal exposure for any ToS enforcement.
+
+// TODO [HIGH][Legal]:
+// Age validation is client-side only and optional. The `min="18"` HTML attribute
+// on the age input is trivially bypassed. Backend does not enforce age minimum.
+// Fix: Make age required. Add server-side validation: if (age < 18) return 400.
+// Risk: Minors accessing cash game coordination platform.
+
+// TODO [HIGH][Security]:
+// Password minimum is 6 characters. This is below acceptable standards for 2025.
+// Fix: Increase minimum to 8 characters in the Zod schema here AND in backend validation.
+// Consider adding complexity requirements (number, special char) as optional hints.
+// Risk: Weak passwords that are trivially brute-forced.
+
+// TODO [MEDIUM][UX]:
+// No onboarding flow after registration. User is dropped directly into the games
+// list with no explanation of how the platform works, how to find games, or
+// what to do first. New user activation rate will be very low.
+// Fix: Implement a 3-step onboarding: (1) complete profile, (2) view first game,
+// (3) send first join request or post first game.
+// Risk: Users sign up and immediately uninstall because they don't know what to do.
+
+// TODO [MEDIUM][UX]:
+// No phone number field on registration. Phone verification would be the strongest
+// trust signal on this platform (hosting = real person, real address).
+// Fix: Add optional phone field. For hosts, make phone verification required.
+// Risk: Platform filled with anonymous accounts — no trust foundation.
+
+// TODO [LOW][UX]:
+// skillLevel self-selection is unreliable. PRO players under-declare to find
+// easier games. Beginners over-declare to join higher-stakes games.
+// Fix: Add a brief quiz or let skill level be set/adjusted by host ratings over time.
+// Risk: Skill level mismatch at games creates bad experiences.
+
 'use client'
 
 import { useState } from 'react'

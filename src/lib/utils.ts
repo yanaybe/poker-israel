@@ -74,6 +74,28 @@ export function formatHouseFee(
   return 'ללא עמלה'
 }
 
+// TODO [HIGH][Scalability]:
+// CITY_COORDS is hardcoded to only 20 Israeli cities. Israel has 255+ municipalities.
+// Users in Ra'anana, Petah Tikva, Modiin, Rishon LeZion suburbs, etc. cannot
+// find nearby games because their city has no coordinates.
+// Fix: Replace with a cities table in the database, or use a geocoding API
+// (Google Geocoding or OpenStreetMap Nominatim) to resolve arbitrary city names.
+// Risk: Severely limits geographic coverage — suburbs are where home games happen.
+
+// TODO [HIGH][Performance]:
+// Haversine distance calculation runs client-side after fetching ALL games.
+// All game data is sent over the network before any geographic filtering occurs.
+// Fix: Use PostGIS extension on PostgreSQL for server-side geo queries.
+// Add a `location` geometry column to Game and query by ST_DWithin radius.
+// Risk: At 10,000 games, client receives 10,000 records and computes distances in-browser.
+
+// TODO [MEDIUM][UX]:
+// CITY_COORDS duplicates ISRAELI_CITIES in src/types/index.ts. Two sources of truth
+// for the same list — they can diverge causing bugs (city in dropdown but no coords).
+// Fix: Single source of truth: derive CITY_COORDS keys from ISRAELI_CITIES, or
+// store both name and coords in a unified config object.
+// Risk: City added to dropdown but missing from CITY_COORDS → distance shows null.
+
 export const CITY_COORDS: Record<string, [number, number]> = {
   'תל אביב': [32.0853, 34.7818],
   'ירושלים': [31.7683, 35.2137],
@@ -96,6 +118,20 @@ export const CITY_COORDS: Record<string, [number, number]> = {
   'אשקלון': [31.6688, 34.5713],
   'רחובות': [31.8964, 34.8117],
 }
+
+// TODO [HIGH][Performance]:
+// haversineKm is called client-side inside GameCard for every game in the list.
+// At 100 games it runs 100 times per render. Results are not memoized.
+// Fix: Move geo-filtering to server side (PostGIS). If client-side is retained,
+// memoize results with useMemo keyed by userLocation + city.
+// Risk: CPU spike on low-end mobile devices when rendering large game lists.
+
+// TODO [MEDIUM][UX]:
+// formatDriveTime assumes 50 km/h average speed for all Israeli routes.
+// Tel Aviv to Jerusalem via Highway 1 is ~60km but takes 45-70 min depending on traffic.
+// Fix: Use a routing API (Google Directions, HERE Maps) for accurate ETAs.
+// At minimum, adjust the speed assumption per region.
+// Risk: Users get inaccurate drive time estimates that don't match reality.
 
 export function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371

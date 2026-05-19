@@ -39,12 +39,33 @@ export async function GET(_req: Request, { params }: { params: { userId: string 
   return NextResponse.json({ messages, otherUser })
 }
 
+// TODO [HIGH][Trust & Safety]: Add rate limiting to POST.
+// A user can send unlimited messages per second to any other user.
+// Fix: Rate limit: max 30 messages per user per hour (Redis counter).
+// Risk: Message flooding / harassment tool.
+
+// TODO [HIGH][Trust & Safety]: Check if receiver has blocked sender before allowing message.
+// Fix: Check Block table (to be created): if blocked → return 403 'המשתמש חסם אותך'
+// Risk: Blocked users can still send messages.
+
+// TODO [MEDIUM][Security]: content is not length-validated on backend.
+// A message of 100,000 characters can be sent and stored.
+// Fix: if (content.length > 2000) return 400
+// Risk: DB bloat; potential DoS via large message payloads.
+
+// TODO [MEDIUM][Backend]: No notification created when a message is sent.
+// The receiver only discovers new messages via 3-second polling.
+// Fix: Create a Notification record (type: 'NEW_MESSAGE') on POST.
+// Eventually: push via WebSocket or web push notification.
+// Risk: Users miss messages and don't respond — kills engagement.
+
 export async function POST(req: Request, { params }: { params: { userId: string } }) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) return NextResponse.json({ error: 'נא להתחבר' }, { status: 401 })
 
   const { content } = await req.json()
   if (!content?.trim()) return NextResponse.json({ error: 'הודעה ריקה' }, { status: 400 })
+  // TODO [MEDIUM][Security]: Add max length check: if (content.length > 2000) return 400
 
   const receiver = await prisma.user.findUnique({ where: { id: params.userId } })
   if (!receiver) return NextResponse.json({ error: 'המשתמש לא נמצא' }, { status: 404 })

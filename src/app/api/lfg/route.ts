@@ -1,3 +1,45 @@
+// TODO [HIGH][Backend]:
+// GET /api/lfg has no pagination. Returns ALL active LFG posts for a city.
+// Fix: Add pagination: ?page=1&limit=20
+// Risk: At scale, returns unbounded number of posts.
+
+// TODO [HIGH][Backend]:
+// POST /api/lfg has no rate limiting. A user can create unlimited LFG posts
+// (the old one is closed, a new one created — but this can be scripted).
+// Fix: Rate limit: max 5 LFG post creations per user per day.
+// Risk: LFG feed spamming with bot-generated posts.
+
+// TODO [HIGH][Backend]:
+// No backend validation of POST body. city, availableText, buyIn, gameTypes
+// are all accepted without type/bounds checking.
+// Fix: Add Zod schema:
+//   city: z.enum(ISRAELI_CITIES)
+//   availableText: z.string().min(10).max(500)
+//   buyIn: z.number().int().min(0).max(100000).nullable()
+// Risk: Invalid data stored; potential XSS via unvalidated availableText.
+
+// TODO [MEDIUM][UX]:
+// 7-day LFG post expiry is hardcoded. Should be configurable.
+// Fix: Move to platform config or environment variable.
+// Risk: Cannot adjust expiry without code deployment.
+
+// TODO [MEDIUM][Backend]:
+// No notification to existing LFG posters when a matching game is created.
+// The most valuable feature would be: "A 1/2 cash game was just posted in your city!"
+// Fix: On game creation, query active LFG posts by city + gameType and notify them.
+// Risk: LFG feature is disconnected from game creation — misses its core value proposition.
+
+// TODO [MEDIUM][Trust & Safety]:
+// No moderation of LFG post content. Users could post offensive or inappropriate
+// "available text" that other users see.
+// Fix: Implement content moderation (keyword filter or ML-based) on POST.
+// Risk: Inappropriate content visible to all users in a city.
+
+// TODO [LOW][UX]:
+// LFG posts only filterable by city — no filtering by gameType, buyIn range, or skill level.
+// Fix: Add server-side filtering for gameType and buyIn range.
+// Risk: Discovery is imprecise — players find wrong game types.
+
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'

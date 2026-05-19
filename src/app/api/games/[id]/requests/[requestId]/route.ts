@@ -1,3 +1,42 @@
+// TODO [CRITICAL][Backend]:
+// RACE CONDITION in approval flow: The approve → increment → check full sequence
+// is NOT atomic. Between the increment and the full-check, another approval can
+// slip through, causing the game to go over capacity.
+// Fix: Wrap the entire approval flow in a Prisma transaction:
+//   prisma.$transaction([
+//     update request status,
+//     increment currentPlayers (with optimistic locking),
+//     check and update game status
+//   ])
+// Risk: Games go over maximum player capacity.
+
+// TODO [HIGH][Backend]:
+// No validation that requestId belongs to the specified gameId. A malicious host
+// could approve requestId from a DIFFERENT game by crafting the URL:
+//   PATCH /api/games/gameA/requests/requestFromGameB
+// Fix: Add: `where: { id: params.requestId, gameId: params.id }` in findUnique.
+// Risk: Cross-game request manipulation.
+
+// TODO [HIGH][UX]:
+// No email/push notification when a join request is approved or rejected.
+// The current in-app notification is only discovered if the user opens the app.
+// Fix: Send email notification via SendGrid/Resend on status change.
+// Risk: Players miss approval notification and don't show up to the game.
+
+// TODO [MEDIUM][Backend]:
+// When rejecting a previously-approved player, currentPlayers is decremented and
+// status reverts to OPEN. But if the game was FULL, it correctly reverts to OPEN.
+// However, if multiple rejections happen simultaneously, currentPlayers could
+// decrement below 1 (the host).
+// Fix: Add `data: { currentPlayers: { decrement: 1 } }` with a floor constraint.
+// Risk: currentPlayers becomes 0 or negative, breaking capacity calculations.
+
+// TODO [MEDIUM][Analytics]:
+// No tracking of request approval/rejection decisions for marketplace analytics.
+// Fix: Log APPROVED/REJECTED events with latency (time from request to decision).
+// This data helps optimize the host experience and identify friction points.
+// Risk: Cannot measure host response rate — key marketplace health metric.
+
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
